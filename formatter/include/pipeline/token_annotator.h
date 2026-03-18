@@ -12,10 +12,10 @@ class TokenAnnotator {
  public:
   explicit TokenAnnotator(const FormatStyle& style);
 
-  void annotate(std::vector<FormatToken>& tokens,
+  std::vector<FormatToken> annotate(std::span<slang::parsing::Token>& tokens,
                 const TokenPartitionTree& tree);
 
  private:
-  const FormatStyle& style_;
+  const FormatStyle& style;
 };
 }  // namespace format

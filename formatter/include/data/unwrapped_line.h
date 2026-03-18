@@ -12,20 +12,12 @@ enum class PartitionPolicy : uint8_t {
   kFitOnLineElseExpand,
   kTabularAlignment,
   kAlreadyFormatted,
-  kPreserveOriginal,
 };
 
 struct UnwrappedLine {
-  FormatTokenRange tokens{nullptr, nullptr};  // Диапазон [begin, end) ???
-  IndentLevel indentation_spaces{0};
-  PartitionPolicy partition_policy{PartitionPolicy::kFitOnLineElseExpand};
-  const void* origin{nullptr};
-
-  FormatToken* begin() const noexcept { return tokens.first; }
-  FormatToken* end() const noexcept { return tokens.second; }
-
-  bool empty() const noexcept { return tokens.first == tokens.second; }
-  std::ptrdiff_t size() const noexcept { return tokens.second - tokens.first; }
+  std::span<FormatToken> tokens;
+  IndentLevel indentation_spaces;
+  PartitionPolicy partition_policy;
 
   ColumnNumber computeWidth() const noexcept;
 

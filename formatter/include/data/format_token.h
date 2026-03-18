@@ -5,21 +5,21 @@
 #include <cstdint>
 #include <string_view>
 #include <utility>
+#include <span>
 
 #include "format_style.h"
 
 namespace format {
 
 enum class BreakDecision : uint8_t {
-  kUndecided,
   kMustBreak,
   kMustNotBreak,
 };
 
 struct InterTokenInfo {
-  int spaces_required{0};
-  int break_penalty{0};
-  BreakDecision break_decision{BreakDecision::kUndecided};
+  size_t spaces_required;
+  size_t break_penalty;
+  BreakDecision break_decision;
 };
 
 enum class TokenAction : uint8_t {
@@ -29,8 +29,8 @@ enum class TokenAction : uint8_t {
 };
 
 struct InterTokenDecision {
-  int spaces_before{0};
-  TokenAction action{TokenAction::kAppend};
+  size_t spaces_before;
+  TokenAction action;
 
   bool needsNewline() const noexcept { return action == TokenAction::kWrap; }
 };
@@ -51,7 +51,5 @@ struct FormatToken {
   slang::TokenKind kind() const noexcept { return token.kind; }
   bool newlineBefore() const noexcept { return !token.isOnSameLine(); }
 };
-
-using FormatTokenRange = std::pair<FormatToken*, FormatToken*>;
 
 }  // namespace format
