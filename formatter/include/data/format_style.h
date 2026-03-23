@@ -1,17 +1,17 @@
 #pragma once
 
-#include <cstdint>
+#include <cstddef>
 
 namespace format {
 
-using ColumnNumber = uint32_t;
-using IndentLevel = uint8_t;
+using ColumnNumber = size_t;
+using IndentLevel = size_t;
 
 struct FormatStyle {
-  ColumnNumber column_limit{100};
-  IndentLevel indentation_spaces{2};
+  ColumnNumber column_limit;
+  IndentLevel indentation_spaces;
 
-  static FormatStyle defaults() noexcept;
+  static auto defaults() noexcept -> FormatStyle;
 };
 
 }  // namespace format

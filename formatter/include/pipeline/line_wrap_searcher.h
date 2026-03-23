@@ -2,12 +2,13 @@
 
 #include <vector>
 
-#include "format_style.h"
-#include "format_token.h"
-#include "token_partition_tree.h"
+#include "data/format_style.h"
+#include "data/format_token.h"
+#include "data/unwrapped_line.h"
 
 namespace format {
-std::vector<InterTokenDecision> searchLineWraps(
-    const UnwrappedLine& line, const FormmatStyle& style,
-    ColumnNumber initial_column = 0);
+[[nodiscard]] auto searchLineWraps(const UnwrappedLine<FormatToken>& line,
+                                   const FormatStyle& style,
+                                   ColumnNumber initial_column = 0)
+    -> std::vector<InterTokenDecision>;
 }  // namespace format

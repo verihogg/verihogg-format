@@ -3,36 +3,30 @@
 #include <slang/parsing/Token.h>
 
 #include <cstdint>
-#include <string_view>
-#include <utility>
-
-#include "format_style.h"
 
 namespace format {
 
 enum class BreakDecision : uint8_t {
-  kUndecided,
   kMustBreak,
   kMustNotBreak,
+  kUndecided,
 };
 
 struct InterTokenInfo {
-  int spaces_required{0};
-  int break_penalty{0};
-  BreakDecision break_decision{BreakDecision::kUndecided};
+  size_t spaces_required;
+  size_t break_penalty;
+  BreakDecision break_decision;
 };
 
 enum class TokenAction : uint8_t {
-  kAppend,    // продолжить строку: вставить spaces_before пробелов
-  kWrap,      // новая строка + отступ
-  kPreserve,  // сохранить оригинал (disabled_range)
+  kAppend,    // continue line: insert spaces_before spaces
+  kWrap,      // newline + indent
+  kPreserve,  // preserve original (disabled_range)
 };
 
 struct InterTokenDecision {
-  int spaces_before{0};
-  TokenAction action{TokenAction::kAppend};
-
-  bool needsNewline() const noexcept { return action == TokenAction::kWrap; }
+  size_t spaces_before;
+  TokenAction action;
 };
 
 enum class GroupBalancing : uint8_t {
@@ -43,15 +37,9 @@ enum class GroupBalancing : uint8_t {
 
 struct FormatToken {
   slang::parsing::Token token;
-  InterTokenInfo before;
-  InterTokenDecision decision;
+  InterTokenInfo before{};
+  InterTokenDecision decision{};
   GroupBalancing balancing{GroupBalancing::kNone};
-
-  std::string_view text() const noexcept { return token.rawText(); }
-  slang::TokenKind kind() const noexcept { return token.kind; }
-  bool newlineBefore() const noexcept { return !token.isOnSameLine(); }
 };
-
-using FormatTokenRange = std::pair<FormatToken*, FormatToken*>;
 
 }  // namespace format

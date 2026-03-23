@@ -1,23 +1,24 @@
 #pragma once
 
-#include <vector>
+#include <slang/ast/Compilation.h>
+#include <slang/parsing/Token.h>
 
-#include "format_style.h"
-#include "format_token.h"
-#include "token_partition_tree.h"
+#include "data/format_style.h"
+#include "data/token_partition_tree.h"
 
 namespace format {
 
 class TreeUnwrapper {
  public:
   TreeUnwrapper(const slang::syntax::SyntaxTree& syntax_tree,
-                std::vector<FormatToken>& tokens, const FormatStyle& style);
+                const FormatStyle& style)
+      : syntax_tree(syntax_tree), style(style) {};
 
-  TokenPartitionTree unwrap();
+  [[nodiscard]] auto unwrap() const
+      -> TokenPartitionTree<slang::parsing::Token>;
 
  private:
-  const slang::syntax::SyntaxTree& syntax_tree_;
-  std::vector<FormatToken>& tokens_;
-  const FormatStyle& style_;
+  std::reference_wrapper<const slang::syntax::SyntaxTree> syntax_tree;
+  std::reference_wrapper<const FormatStyle> style;
 };
 }  // namespace format

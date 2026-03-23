@@ -13,17 +13,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(SRC
-  formatter/src/main.cpp
-)
+file(GLOB_RECURSE SRC formatter/src/**.cpp)
 
 find_package(slang REQUIRED)
-
-foreach(f ${SRC})
-  if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${f}")
-    message(FATAL_ERROR "Source file not found: ${f}\nCheck for typos/incorrect path in CMakeLists.txt")
-  endif()
-endforeach()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)

@@ -1,21 +1,22 @@
 #pragma once
 
-#include <vector>
+#include <slang/parsing/Token.h>
 
-#include "format_style.h"
-#include "format_token.h"
-#include "token_partition_tree.h"
+#include "data/format_style.h"
+#include "data/format_token.h"
+#include "data/token_partition_tree.h"
 
 namespace format {
 
 class TokenAnnotator {
  public:
-  explicit TokenAnnotator(const FormatStyle& style);
+  explicit TokenAnnotator(const FormatStyle& style) : style(style) {};
 
-  void annotate(std::vector<FormatToken>& tokens,
-                const TokenPartitionTree& tree);
+  [[nodiscard]] auto annotate(
+      const TokenPartitionTree<slang::parsing::Token>& tree) const
+      -> TokenPartitionTree<FormatToken>;
 
  private:
-  const FormatStyle& style_;
+  std::reference_wrapper<const FormatStyle> style;
 };
 }  // namespace format

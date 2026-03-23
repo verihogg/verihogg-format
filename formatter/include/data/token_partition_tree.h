@@ -1,88 +1,66 @@
 #pragma once
 
-#include <functional>
+#include <memory>
+#include <vector>
 
 #include "unwrapped_line.h"
 
 namespace format {
 
-class TokenPartition {
+template <typename Token>
+class TokenPartitionTree {
  public:
-  UnwrappedLine value;
+  auto addChild(UnwrappedLine<Token> /*line*/) -> TokenPartitionTree* {
+    throw std::runtime_error("TODO");
+  }
 
-  TokenPartition* addChild(UnwrappedLine line);
+  void mergeWithPreviousSibling() { throw std::runtime_error("TODO"); }
 
-  void mergeWithPreviousSibling();
-
-  void hoistOnlyChild();
+  void hoistOnlyChild() { throw std::runtime_error("TODO"); }
 
   template <typename Func>
   void visitPreOrder(Func&& func) {
     func(*this);
-    for (auto& child : children_)
+    for (auto& child : children_) {
       child->visitPreOrder(std::forward<Func>(func));
+    }
   }
 
   template <typename Func>
   void visitPostOrder(Func&& func) {
-    for (auto& child : children_)
+    for (auto& child : children_) {
       child->visitPostOrder(std::forward<Func>(func));
+    }
     func(*this);
   }
 
-  template <typename Func>
-  void forEachLeaf(Func&& func) {
-    if (isLeaf()) {
-      func(value);
-    } else {
-      for (auto& child : children_)
-        child->forEachLeaf(std::forward<Func>(func));
-    }
+  [[nodiscard]] auto isLeaf() const noexcept -> bool {
+    return children_.empty();
+  }
+  [[nodiscard]] auto isRoot() const noexcept -> bool {
+    return this->parent_.lock() == nullptr;
+  }
+  [[nodiscard]] auto childCount() const noexcept -> std::size_t {
+    return children_.size();
+  }
+  [[nodiscard]] auto parent() const noexcept
+      -> std::weak_ptr<TokenPartitionTree> {
+    return parent_;
   }
 
-  template <typename Func>
-  void forEachLeaf(Func&& func) const {
-    if (isLeaf()) {
-      func(value);
-    } else {
-      for (const auto& child : children_)
-        child->forEachLeaf(std::forward<Func>(func));
-    }
-  }
-
-  void collectLeaves(std::vector<UnwrappedLine*>& out);
-
-  bool isLeaf() const noexcept { return children_.empty(); }
-  bool isRoot() const noexcept { return parent_ == nullptr; }
-  std::size_t childCount() const noexcept { return children_.size(); }
-  TokenPartition* parent() const noexcept { return parent_; }
-
-  const std::vector<std::unique_ptr<TokenPartition>>& children()
-      const noexcept {
+  [[nodiscard]] auto children() const noexcept
+      -> std::span<const std::shared_ptr<TokenPartitionTree>> {
     return children_;
   }
 
- private:
-  TokenPartition* parent_{nullptr};
-  std::vector<std::unique_ptr<TokenPartition>> children_;
-};
-
-class TokenPartitionTree {
- public:
-  explicit TokenPartitionTree(UnwrappedLine root_line);
-
-  TokenPartition& root() noexcept { return *root_; }
-  const TokenPartition& root() const noexcept { return *root_; }
-
-  void collectLeaves(std::vector<UnwrappedLine*>& out);
-
-  template <typename Func>
-  void forEachLeaf(Func&& func) {
-    root_->forEachLeaf(std::forward<Func>(func));
-  };
+  [[nodiscard]] auto toString() const -> std::string {
+    throw std::runtime_error("TODO");
+  }
 
  private:
-  std::unique_ptr<TokenPartition> root_;
+  std::weak_ptr<TokenPartitionTree> parent_;
+  std::vector<std::shared_ptr<TokenPartitionTree>> children_;
+  UnwrappedLine<Token> value;
 };
 
 }  // namespace format
