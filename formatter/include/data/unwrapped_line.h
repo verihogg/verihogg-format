@@ -1,5 +1,7 @@
 #pragma once
 
+#include <slang/syntax/SyntaxNode.h>
+
 #include <cstdint>
 #include <span>
 
@@ -16,6 +18,7 @@ enum class PartitionPolicy : uint8_t {
 template <typename Token>
 struct UnwrappedLine {
   std::span<Token> tokens;
+  const slang::syntax::SyntaxNode* origin{nullptr};
   IndentLevel indentation_spaces;
   PartitionPolicy partition_policy;
 };
