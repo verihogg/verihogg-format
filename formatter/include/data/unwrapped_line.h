@@ -18,7 +18,7 @@ enum class PartitionPolicy : uint8_t {
 template <typename Token>
 struct UnwrappedLine {
   std::span<Token> tokens;
-  const slang::syntax::SyntaxNode* origin{nullptr};
+  const slang::syntax::SyntaxNode* origin;
   IndentLevel indentation_spaces;
   PartitionPolicy partition_policy;
 };

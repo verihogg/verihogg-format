@@ -15,6 +15,7 @@ Checks: >
   readability-*,
 
 WarningsAsErrors: '*'
+HeaderFilterRegex: '.*'
 
 CheckOptions:
   - key: readability-identifier-naming.ConstantCase
