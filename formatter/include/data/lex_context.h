@@ -1,5 +1,5 @@
 #include <slang/diagnostics/Diagnostics.h>
-#include <slang/parsing/Preprocessor.h>
+#include <slang/parsing/Lexer.h>
 #include <slang/parsing/Token.h>
 #include <slang/text/SourceManager.h>
 #include <slang/util/BumpAllocator.h>
@@ -17,13 +17,10 @@ class LexContext {
       return tokens;
     }
 
-    slang::Bag options;
-    slang::parsing::Preprocessor pp(source_manager_, alloc_, diagnostics_,
-                                    options);
-    pp.pushSource(*buffer);
+    slang::parsing::Lexer lexer(*buffer, alloc_, diagnostics_, source_manager_);
 
     while (true) {
-      auto tok = pp.next();
+      auto tok = lexer.lex();
       if (tok.kind == slang::parsing::TokenKind::EndOfFile) {
         break;
       }
