@@ -4,7 +4,7 @@
 
 #include "data/format_style.h"
 #include "data/format_token.h"
-#include "data/token_partition_tree.h"
+#include "data/unwrapped_line.h"
 
 namespace format {
 
@@ -13,8 +13,8 @@ class TokenAnnotator {
   explicit TokenAnnotator(const FormatStyle& style) : style(style) {};
 
   [[nodiscard]] auto annotate(
-      const TokenPartitionTree<slang::parsing::Token>& tree) const
-      -> TokenPartitionTree<FormatToken>;
+      const std::vector<UnwrappedLine<const slang::parsing::Token>>& lines)
+      -> std::vector<UnwrappedLine<FormatToken>>;
 
  private:
   std::reference_wrapper<const FormatStyle> style;

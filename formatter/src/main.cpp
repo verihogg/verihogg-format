@@ -1,11 +1,12 @@
-#include <slang/driver/Driver.h>
+
+#include "data/lex_context.h"
 
 auto main(int argc, char** argv) -> int {
-  slang::driver::Driver driver;
-  driver.addStandardArgs();
-  if (!driver.parseCommandLine(argc, argv) || !driver.parseAllSources() ||
-      driver.syntaxTrees.empty()) {
+  if (argc < 2) {
     return 1;
   }
+
+  LexContext ctx;
+  auto tokens = ctx.lex_file(argv[1]);
   return 0;
 }

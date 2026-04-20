@@ -2,12 +2,8 @@
 
 #include <stdexcept>
 
-#include "data/format_style.h"
-#include "data/format_token.h"
-#include "data/token_partition_tree.h"
-
 namespace format {
-void align(TokenPartitionTree<FormatToken>& /*tree*/,
+void align(std::vector<UnwrappedLine<FormatToken>>& /*lines*/,
            const FormatStyle& /*style*/) {
   throw std::runtime_error("TODO");
 }

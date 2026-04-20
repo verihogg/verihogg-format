@@ -1,7 +1,9 @@
 #pragma once
 
+#include <slang/parsing/Token.h>
+
+#include <span>
 #include <string>
-#include <string_view>
 
 #include "data/format_style.h"
 
@@ -10,5 +12,6 @@ struct FormatResult {
   std::string formatted_text;
 };
 
-auto format(std::string_view source_text, FormatStyle style) -> FormatResult;
+auto format(std::span<const slang::parsing::Token> tokens, FormatStyle style)
+    -> FormatResult;
 }  // namespace format
