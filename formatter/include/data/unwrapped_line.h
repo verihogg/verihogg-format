@@ -30,6 +30,7 @@ struct UnwrappedLine {
   std::span<UnwrappedLineNode<Token>> tokens;
 
   IndentLevel indentation_spaces;
+  PartitionPolicy partition_policy;
   // todo
 };
 
