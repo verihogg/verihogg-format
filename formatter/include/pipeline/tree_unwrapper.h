@@ -15,7 +15,7 @@ class TreeUnwrapper {
       : tokens(tokens), style(style) {}
 
   [[nodiscard]] auto unwrap() const
-      -> std::vector<UnwrappedLine<const slang::parsing::Token>>;
+      -> std::vector<UnwrappedLine<slang::parsing::Token>>;
 
  private:
   std::span<const slang::parsing::Token> tokens;

@@ -1,7 +1,8 @@
 #include "formatter.h"
 
-#include <slang/syntax/SyntaxTree.h>
+#include <slang/parsing/Token.h>
 
+#include <span>
 #include <stdexcept>
 
 #include "data/format_style.h"

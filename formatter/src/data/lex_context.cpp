@@ -1,6 +1,11 @@
 #include "data/lex_context.h"
 
 #include <slang/parsing/Lexer.h>
+#include <slang/parsing/Token.h>
+#include <slang/parsing/TokenKind.h>
+
+#include <string_view>
+#include <vector>
 
 auto LexContext::lex_file(std::string_view path)
     -> std::vector<slang::parsing::Token> {

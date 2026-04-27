@@ -13,7 +13,7 @@ class TokenAnnotator {
   explicit TokenAnnotator(const FormatStyle& style) : style(style) {};
 
   [[nodiscard]] auto annotate(
-      const std::vector<UnwrappedLine<const slang::parsing::Token>>& lines)
+      const std::vector<UnwrappedLine<slang::parsing::Token>>& lines)
       -> std::vector<UnwrappedLine<FormatToken>>;
 
  private:
