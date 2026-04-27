@@ -2,6 +2,8 @@
 
 #include <slang/syntax/SyntaxTree.h>
 
+#include <stdexcept>
+
 #include "data/format_style.h"
 #include "pipeline/line_joiner.h"
 #include "pipeline/tabular_aligner.h"
@@ -15,6 +17,6 @@ auto format(std::span<const slang::parsing::Token> tokens, FormatStyle style)
   auto annotatedLines = TokenAnnotator(style).annotate(unwrappedLines);
   joinLines(annotatedLines, style);
   align(annotatedLines, style);
-  return {.formatted_text = "TODO"};
+  throw std::runtime_error("TODO");
 }
 }  // namespace format
