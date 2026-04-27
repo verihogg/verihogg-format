@@ -3,12 +3,13 @@
 #include <slang/parsing/Token.h>
 
 #include <stdexcept>
+#include <vector>
 
-#include "data/token_partition_tree.h"
+#include "data/unwrapped_line.h"
 
 namespace format {
 [[nodiscard]] auto TreeUnwrapper::unwrap() const
-    -> TokenPartitionTree<slang::parsing::Token> {
+    -> std::vector<UnwrappedLine<slang::parsing::Token>> {
   throw std::runtime_error("TODO");
 }
 }  // namespace format

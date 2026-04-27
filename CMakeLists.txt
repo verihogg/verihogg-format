@@ -16,6 +16,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 file(GLOB_RECURSE SRC formatter/src/**.cpp)
 
 find_package(slang REQUIRED)
+find_package(Microsoft.GSL CONFIG REQUIRED)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -28,7 +29,7 @@ target_include_directories(${PROJECT_NAME}
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/formatter/include>
 )
 
-target_link_libraries(${PROJECT_NAME} slang::slang)
+target_link_libraries(${PROJECT_NAME} slang::slang Microsoft.GSL::GSL)
 
 if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /W4 /bigobj)

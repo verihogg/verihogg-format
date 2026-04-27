@@ -2,8 +2,9 @@
 
 #include "data/format_style.h"
 #include "data/format_token.h"
-#include "data/token_partition_tree.h"
+#include "data/unwrapped_line.h"
 
 namespace format {
-void joinLines(TokenPartitionTree<FormatToken>& tree, const FormatStyle& style);
+void joinLines(std::vector<UnwrappedLine<FormatToken>>& lines,
+               const FormatStyle& style);
 }  // namespace format
