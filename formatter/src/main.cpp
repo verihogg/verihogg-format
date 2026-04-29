@@ -13,6 +13,6 @@ auto main(int argc, const char** argv) -> int {
   }
 
   LexContext ctx;
-  auto tokens = ctx.lex_file(gsl::at(args, 1));
+  auto tokens = ctx.lex_file(args[1]);
   return 0;
 }
