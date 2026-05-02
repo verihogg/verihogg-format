@@ -5,6 +5,7 @@
   ] ++ sv-lang.buildInputs;
 
   nativeBuildInputs = with pkgs; [
+    gtest
     cmake
     ninja
     pkg-config
