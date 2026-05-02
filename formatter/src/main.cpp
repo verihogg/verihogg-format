@@ -7,6 +7,7 @@
 #include "cli/format_args.h"
 #include "data/lex_context.h"
 #include "formatter.h"
+#include "pipeline/runner.h"
 
 auto main(int argc, char** argv) -> int {
   try {
@@ -34,6 +35,7 @@ auto main(int argc, char** argv) -> int {
       std::cout << result.formatted_text;
       return 0;
     }
+    runFormatter(files, style, run, {.out = &std::cout, .err = &std::cerr});
     return 0;
   } catch (const std::exception& e) {
     std::cerr << "Error: " << e.what() << "\n";
