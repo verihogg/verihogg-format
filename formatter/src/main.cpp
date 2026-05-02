@@ -24,9 +24,6 @@ auto main(int argc, const char** argv) -> int {
   };
   format::TreeUnwrapper unwrapper(tokens, style);
   auto unwrapped_lines = unwrapper.unwrap();
-  for (size_t i = 0; i < unwrapped_lines.size(); ++i) {
-    std::cout << "Line " << i << ":\n";
-    format::printUnwrappedLine(unwrapped_lines[i], 0);
-  }
+  format::printUnwrappedLines(unwrapped_lines);
   return 0;
 }

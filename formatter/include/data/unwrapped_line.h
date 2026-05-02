@@ -1,8 +1,10 @@
 #pragma once
 
+#include <slang/parsing/Token.h>
 #include <slang/syntax/SyntaxNode.h>
 
 #include <cstdint>
+#include <iostream>
 #include <vector>
 
 #include "format_style.h"
@@ -34,7 +36,12 @@ struct UnwrappedLine {
   // todo
 };
 
-auto printUnwrappedLine(UnwrappedLine<slang::parsing::Token>& line,
-                        size_t depth) -> void;
+auto printUnwrappedLine(const UnwrappedLine<slang::parsing::Token>& line,
+                        size_t depth = 0,
+                        std::ostream& os = std::cout) -> void;
+
+auto printUnwrappedLines(
+    const std::vector<UnwrappedLine<slang::parsing::Token>>& lines,
+    std::ostream& os = std::cout) -> void;
 
 }  // namespace format

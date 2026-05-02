@@ -4,6 +4,8 @@
 #include <slang/parsing/TokenKind.h>
 
 #include <span>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include "data/unwrapped_line.h"
@@ -16,6 +18,25 @@ using Token = slang::parsing::Token;
 using TK = slang::parsing::TokenKind;
 using TriviaKind = slang::parsing::TriviaKind;
 using Line = UnwrappedLine<Token>;
+
+[[nodiscard]] auto isCompilerDirective(Token tok) -> bool {
+  if (tok.kind != TK::Directive) {
+    return false;
+  }
+
+  const std::string_view text = tok.rawText();
+  return text == "`begin_keywords" || text == "`celldefine" ||
+         text == "`default_decay_time" || text == "`default_nettype" ||
+         text == "`default_trireg_strength" || text == "`define" ||
+         text == "`else" || text == "`elsif" || text == "`end_keywords" ||
+         text == "`endcelldefine" || text == "`endif" ||
+         text == "`endprotect" || text == "`endprotected" || text == "`ifdef" ||
+         text == "`ifndef" || text == "`include" || text == "`line" ||
+         text == "`nounconnected_drive" || text == "`pragma" ||
+         text == "`protect" || text == "`protected" || text == "`resetall" ||
+         text == "`timescale" || text == "`unconnected_drive" ||
+         text == "`undef" || text == "`undefineall";
+}
 
 class SVParser {
  public:
@@ -56,7 +77,8 @@ class SVParser {
 
   // ---- line management ----
 
-  auto addLine(PartitionPolicy policy = PartitionPolicy::kAlwaysExpand) -> void {
+  auto addLine(PartitionPolicy policy = PartitionPolicy::kAlwaysExpand)
+      -> void {
     if (line_.tokens.empty()) {
       return;
     }
@@ -64,6 +86,22 @@ class SVParser {
     line_.partition_policy = policy;
     lines_.push_back(std::move(line_));
     line_ = Line{};
+  }
+
+  [[nodiscard]] auto makeLine(PartitionPolicy policy,
+                              size_t extraIndentLevels = 0) const -> Line {
+    Line line;
+    line.indentation_spaces =
+        (indent_level_ + extraIndentLevels) * style_->indentation_spaces;
+    line.partition_policy = policy;
+    return line;
+  }
+
+  static auto pushChildLine(Line& parent, size_t tokenIndex, Line child)
+      -> void {
+    if (!child.tokens.empty()) {
+      parent.tokens[tokenIndex].children.push_back(std::move(child));
+    }
   }
 
   // ---- helpers ----
@@ -94,10 +132,12 @@ class SVParser {
     addLine();
   }
 
-  // The next token starts on a new source line if its leading trivia has a newline.
+  // The next token starts on a new source line if its leading trivia has a
+  // newline.
   [[nodiscard]] static auto hasLeadingNewline(Token tok) -> bool {
     for (auto trivia : tok.trivia()) {
-      if (trivia.kind == TriviaKind::EndOfLine || trivia.kind == TriviaKind::LineComment) {
+      if (trivia.kind == TriviaKind::EndOfLine ||
+          trivia.kind == TriviaKind::LineComment) {
         return true;
       }
     }
@@ -225,28 +265,76 @@ class SVParser {
     line.tokens.push_back({.token = consume(), .children = {}});
     const size_t openIdx = line.tokens.size() - 1;
 
-    Line portLine;
-    portLine.indentation_spaces = (indent_level_ + 1) * style_->indentation_spaces;
-    portLine.partition_policy = PartitionPolicy::kTabularAlignment;
+    Line portLine = makeLine(PartitionPolicy::kTabularAlignment, 1);
+    int parenDepth = 0;
+    int bracketDepth = 0;
+    int braceDepth = 0;
 
-    while (!at(TK::CloseParenthesis) && !at(TK::EndOfFile)) {
-      if (at(TK::Comma)) {
-        portLine.tokens.push_back({.token = consume(), .children = {}});
-        line.tokens[openIdx].children.push_back(std::move(portLine));
-        portLine = Line{};
-        portLine.indentation_spaces = (indent_level_ + 1) * style_->indentation_spaces;
-        portLine.partition_policy = PartitionPolicy::kTabularAlignment;
-      } else if (at(TK::OpenBracket)) {
-        consumeBalancedInto(TK::OpenBracket, TK::CloseBracket, portLine);
-      } else if (at(TK::OpenParenthesis)) {
-        consumeBalancedInto(TK::OpenParenthesis, TK::CloseParenthesis, portLine);
-      } else {
-        portLine.tokens.push_back({.token = consume(), .children = {}});
+    auto atTopLevel = [&]() -> bool {
+      return parenDepth == 0 && bracketDepth == 0 && braceDepth == 0;
+    };
+
+    while (!at(TK::EndOfFile)) {
+      if (at(TK::CloseParenthesis) && atTopLevel()) {
+        break;
       }
+
+      if (atTopLevel() && isCompilerDirective(peek()) &&
+          (portLine.tokens.empty() || hasLeadingNewline(peek()))) {
+        pushChildLine(line, openIdx, std::move(portLine));
+        portLine = makeLine(PartitionPolicy::kTabularAlignment, 1);
+
+        Line directiveLine = makeLine(PartitionPolicy::kAlwaysExpand, 1);
+        consumeInto(directiveLine);
+        while (pos_ < tokens_.size() && !at(TK::EndOfFile)) {
+          if (hasLeadingNewline(peek())) {
+            break;
+          }
+          consumeInto(directiveLine);
+        }
+        pushChildLine(line, openIdx, std::move(directiveLine));
+        continue;
+      }
+
+      if (at(TK::Comma) && atTopLevel()) {
+        consumeInto(portLine);
+        pushChildLine(line, openIdx, std::move(portLine));
+        portLine = makeLine(PartitionPolicy::kTabularAlignment, 1);
+        continue;
+      }
+
+      switch (peek().kind) {
+        case TK::OpenParenthesis:
+          ++parenDepth;
+          break;
+        case TK::CloseParenthesis:
+          if (parenDepth > 0) {
+            --parenDepth;
+          }
+          break;
+        case TK::OpenBracket:
+          ++bracketDepth;
+          break;
+        case TK::CloseBracket:
+          if (bracketDepth > 0) {
+            --bracketDepth;
+          }
+          break;
+        case TK::ApostropheOpenBrace:
+        case TK::OpenBrace:
+          ++braceDepth;
+          break;
+        case TK::CloseBrace:
+          if (braceDepth > 0) {
+            --braceDepth;
+          }
+          break;
+        default:
+          break;
+      }
+      consumeInto(portLine);
     }
-    if (!portLine.tokens.empty()) {
-      line.tokens[openIdx].children.push_back(std::move(portLine));
-    }
+    pushChildLine(line, openIdx, std::move(portLine));
     if (at(TK::CloseParenthesis)) {
       line.tokens.push_back({.token = consume(), .children = {}});
     }
@@ -345,8 +433,8 @@ class SVParser {
     ++indent_level_;
     while (pos_ < tokens_.size()) {
       auto k = peek().kind;
-      if (k == TK::JoinKeyword || k == TK::JoinAnyKeyword || k == TK::JoinNoneKeyword ||
-          k == TK::EndOfFile) {
+      if (k == TK::JoinKeyword || k == TK::JoinAnyKeyword ||
+          k == TK::JoinNoneKeyword || k == TK::EndOfFile) {
         break;
       }
       parseStatement();
@@ -386,7 +474,8 @@ class SVParser {
     if (at(TK::ElseKeyword)) {
       consumeInto(line_);  // else
       if (at(TK::IfKeyword)) {
-        // else if: `if (...)` is added into the same line_ that already has `else`
+        // else if: `if (...)` is added into the same line_ that already has
+        // `else`
         parseIf();
         return;
       }
