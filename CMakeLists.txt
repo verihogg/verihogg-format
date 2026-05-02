@@ -42,3 +42,27 @@ include(GNUInstallDirs)
 install(TARGETS ${PROJECT_NAME}
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+find_package(GTest QUIET)
+if(GTest_FOUND)
+  enable_testing()
+  message(STATUS "GTest_FOUND: ${GTest_FOUND}")
+  message(STATUS "TEST_SRC: ${TEST_SRC}")
+  message(STATUS "LIB_SRC: ${LIB_SRC}")
+
+  file(GLOB_RECURSE LIB_SRC formatter/src/**.cpp)
+  list(FILTER LIB_SRC EXCLUDE REGEX ".*/main\\.cpp$")
+
+  add_library(verihogg-format-lib STATIC ${LIB_SRC})
+  target_include_directories(verihogg-format-lib PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/formatter/include>)
+  target_link_libraries(verihogg-format-lib PUBLIC slang::slang)
+
+  file(GLOB_RECURSE TEST_SRC formatter/tests/**.cpp)
+  if(TEST_SRC)
+    add_executable(verihogg-tests ${TEST_SRC})
+    target_link_libraries(verihogg-tests PRIVATE verihogg-format-lib GTest::gtest GTest::gtest_main)
+    include(GoogleTest)
+    gtest_discover_tests(verihogg-tests)
+  endif()
+endif()
+
