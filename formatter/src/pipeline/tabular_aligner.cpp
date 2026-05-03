@@ -8,7 +8,7 @@ namespace format {
 static constexpr size_t kMinColumnGap = 4;
 static constexpr size_t kMinGroupSize = 2;
 
-auto static range_width(
+[[nodiscard]] auto static range_width(
     const std::vector<UnwrappedLineNode<FormatToken>>& tokens, size_t start,
     size_t end) -> size_t {
   size_t width = 0;
@@ -21,12 +21,16 @@ auto static range_width(
   return width;
 }
 
-auto static is_suffix_token(const FormatToken& ft) -> bool {
-  std::string_view text = ft.token.rawText();
-  return text == "," || text == ";";
+[[nodiscard]] static auto is_suffix_token(const FormatToken& ft) -> bool {
+  if (ft.type != TokenType::kUnknown) {
+    return ft.type == TokenType::kComma || ft.type == TokenType::kSemicolon;
+  }
+  using TK = slang::parsing::TokenKind;
+  return ft.token.kind == TK::Comma || ft.token.kind == TK::Semicolon;
 }
 
-auto static build_row(const UnwrappedLine<FormatToken>& line) -> AlignmentRow {
+[[nodiscard]] auto static build_row(const UnwrappedLine<FormatToken>& line)
+    -> AlignmentRow {
   AlignmentRow row;
   const auto& tokens = line.tokens;
   if (tokens.empty()) {
@@ -47,7 +51,7 @@ auto static build_row(const UnwrappedLine<FormatToken>& line) -> AlignmentRow {
     cell_start = end;
   };
 
-  size_t i = 1;  // токен 0 всегда открывает ячейку 0 без проверок
+  size_t i = 1;
   while (i < tokens.size()) {
     const FormatToken& ft = tokens[i].token;
 
@@ -96,11 +100,11 @@ static void apply_group(AlignmentGroup& group,
         column_offset[c - 1] + group.col_max_width[c - 1] + kMinColumnGap;
   }
 
-  for (size_t ri = 0; ri < group.line_indices.size(); ++ri) {
-    const size_t li = group.line_indices[ri];
-    auto& line = children[li];
+  for (size_t row_i = 0; row_i < group.line_indices.size(); ++row_i) {
+    const size_t line_i = group.line_indices[row_i];
+    auto& line = children[line_i];
     auto& tokens = line.tokens;
-    const AlignmentRow& row = group.table[ri];
+    const AlignmentRow& row = group.table[row_i];
 
     size_t cursor = 0;
 
@@ -117,7 +121,6 @@ static void apply_group(AlignmentGroup& group,
 
       FormatToken& first = tokens[cell.start_idx].token;
       first.decision.spaces_before = spaces;
-      first.decision.action = TokenAction::kAppend;
 
       cursor = target + cell.width;
     }
