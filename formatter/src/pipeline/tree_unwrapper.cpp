@@ -71,9 +71,7 @@ class SVParser {
     return (pos_ < tokens_.size()) ? tokens_[pos_++] : tokens_.back();
   }
 
-  auto consumeInto(Line& line) -> void {
-    line.tokens.push_back({.token = consume(), .children = {}});
-  }
+  auto consumeInto(Line& line) -> void { line.tokens.push_back(consume()); }
 
   // ---- line management ----
 
@@ -86,22 +84,6 @@ class SVParser {
     line_.partition_policy = policy;
     lines_.push_back(std::move(line_));
     line_ = Line{};
-  }
-
-  [[nodiscard]] auto makeLine(PartitionPolicy policy,
-                              size_t extraIndentLevels = 0) const -> Line {
-    Line line;
-    line.indentation_spaces =
-        (indent_level_ + extraIndentLevels) * style_->indentation_spaces;
-    line.partition_policy = policy;
-    return line;
-  }
-
-  static auto pushChildLine(Line& parent, size_t tokenIndex, Line child)
-      -> void {
-    if (!child.tokens.empty()) {
-      parent.tokens[tokenIndex].children.push_back(std::move(child));
-    }
   }
 
   // ---- helpers ----
@@ -262,10 +244,9 @@ class SVParser {
     if (!at(TK::OpenParenthesis)) {
       return;
     }
-    line.tokens.push_back({.token = consume(), .children = {}});
-    const size_t openIdx = line.tokens.size() - 1;
+    line.tokens.push_back(consume());
 
-    Line portLine = makeLine(PartitionPolicy::kTabularAlignment, 1);
+    addLine(PartitionPolicy::kFitOnLineElseExpand);
     int parenDepth = 0;
     int bracketDepth = 0;
     int braceDepth = 0;
@@ -280,26 +261,23 @@ class SVParser {
       }
 
       if (atTopLevel() && isCompilerDirective(peek()) &&
-          (portLine.tokens.empty() || hasLeadingNewline(peek()))) {
-        pushChildLine(line, openIdx, std::move(portLine));
-        portLine = makeLine(PartitionPolicy::kTabularAlignment, 1);
+          (line.tokens.empty() || hasLeadingNewline(peek()))) {
+        addLine(PartitionPolicy::kTabularAlignment);
 
-        Line directiveLine = makeLine(PartitionPolicy::kAlwaysExpand, 1);
-        consumeInto(directiveLine);
+        consumeInto(line);
         while (pos_ < tokens_.size() && !at(TK::EndOfFile)) {
           if (hasLeadingNewline(peek())) {
             break;
           }
-          consumeInto(directiveLine);
+          consumeInto(line);
         }
-        pushChildLine(line, openIdx, std::move(directiveLine));
+        addLine(PartitionPolicy::kAlwaysExpand);
         continue;
       }
 
       if (at(TK::Comma) && atTopLevel()) {
-        consumeInto(portLine);
-        pushChildLine(line, openIdx, std::move(portLine));
-        portLine = makeLine(PartitionPolicy::kTabularAlignment, 1);
+        consumeInto(line);
+        addLine(PartitionPolicy::kTabularAlignment);
         continue;
       }
 
@@ -332,11 +310,11 @@ class SVParser {
         default:
           break;
       }
-      consumeInto(portLine);
+      consumeInto(line);
     }
-    pushChildLine(line, openIdx, std::move(portLine));
+    addLine(PartitionPolicy::kTabularAlignment);
     if (at(TK::CloseParenthesis)) {
-      line.tokens.push_back({.token = consume(), .children = {}});
+      line.tokens.push_back(consume());
     }
   }
 

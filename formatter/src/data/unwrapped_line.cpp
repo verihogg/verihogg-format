@@ -11,7 +11,6 @@ namespace {
 
 using Token = slang::parsing::Token;
 using Line = UnwrappedLine<Token>;
-using Node = UnwrappedLineNode<Token>;
 using PP = PartitionPolicy;
 
 [[nodiscard]] auto policyName(PP policy) -> std::string_view {
@@ -37,13 +36,8 @@ using PP = PartitionPolicy;
 auto printToken(const Token& token, size_t depth, size_t index,
                 std::ostream& os) -> void {
   os << indent(depth) << "[" << index << "] "
-     << slang::parsing::toString(token.kind) << " " << token.rawText()
-     << "\n";
+     << slang::parsing::toString(token.kind) << " " << token.rawText() << "\n";
 }
-
-// NOLINTBEGIN(misc-no-recursion)
-auto printNode(const Node& node, size_t depth, size_t index,
-               std::ostream& os) -> void;
 
 auto printLine(const Line& line, size_t depth, std::string_view label,
                std::ostream& os) -> void {
@@ -53,18 +47,11 @@ auto printLine(const Line& line, size_t depth, std::string_view label,
 
   size_t tokenIndex = 0;
   for (const auto& token : line.tokens) {
-    printNode(token, depth + 1, tokenIndex, os);
+    printToken(token, depth + 1, tokenIndex, os);
     ++tokenIndex;
   }
 }
 
-auto printNode(const Node& node, size_t depth, size_t index,
-               std::ostream& os) -> void {
-  printToken(node.token, depth, index, os);
-  for (const auto& child : node.children) {
-    printLine(child, depth + 1, "child", os);
-  }
-}
 // NOLINTEND(misc-no-recursion)
 
 }  // namespace

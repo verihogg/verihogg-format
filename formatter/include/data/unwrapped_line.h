@@ -19,17 +19,8 @@ enum class PartitionPolicy : uint8_t {
 };
 
 template <typename Token>
-struct UnwrappedLine;
-
-template <typename Token>
-struct UnwrappedLineNode {
-  Token token;
-  std::vector<UnwrappedLine<Token>> children;
-};
-
-template <typename Token>
 struct UnwrappedLine {
-  std::vector<UnwrappedLineNode<Token>> tokens;
+  std::vector<Token> tokens;
 
   IndentLevel indentation_spaces;
   PartitionPolicy partition_policy;
@@ -37,8 +28,7 @@ struct UnwrappedLine {
 };
 
 auto printUnwrappedLine(const UnwrappedLine<slang::parsing::Token>& line,
-                        size_t depth = 0,
-                        std::ostream& os = std::cout) -> void;
+                        size_t depth = 0, std::ostream& os = std::cout) -> void;
 
 auto printUnwrappedLines(
     const std::vector<UnwrappedLine<slang::parsing::Token>>& lines,
