@@ -205,6 +205,43 @@ TEST_F(TreeUnwrapperTest, ThreePortsBecomeThreeLines) {
   EXPECT_EQ(snap(lines), expected);
 }
 
+TEST_F(TreeUnwrapperTest, BodyDeclarationsWithKeywordsUseTabularAlignment) {
+  auto lines = parse("module m (); logic a; output logic y; endmodule");
+
+  const std::vector<LineSnap> expected = {
+      L(0, PP::kFitOnLineElseExpand,
+        {
+            N(TK::ModuleKeyword, "module"),
+            N(TK::Identifier, "m"),
+            N(TK::OpenParenthesis, "("),
+        }),
+      L(0, PP::kFitOnLineElseExpand,
+        {
+            N(TK::CloseParenthesis, ")"),
+            N(TK::Semicolon, ";"),
+        }),
+      L(kIndent, PP::kTabularAlignment,
+        {
+            N(TK::LogicKeyword, "logic"),
+            N(TK::Identifier, "a"),
+            N(TK::Semicolon, ";"),
+        }),
+      L(kIndent, PP::kTabularAlignment,
+        {
+            N(TK::OutputKeyword, "output"),
+            N(TK::LogicKeyword, "logic"),
+            N(TK::Identifier, "y"),
+            N(TK::Semicolon, ";"),
+        }),
+      L(0, PP::kAlwaysExpand,
+        {
+            N(TK::EndModuleKeyword, "endmodule"),
+        }),
+  };
+
+  EXPECT_EQ(snap(lines), expected);
+}
+
 TEST_F(TreeUnwrapperTest, MprfConditionalPortsKeepDirectivesAsLines) {
   auto lines = parse(
       "`include \"scr1_arch_description.svh\"\n"
@@ -337,7 +374,7 @@ TEST_F(TreeUnwrapperTest, MprfRamAttributeDeclarationsStayFlat) {
             N(TK::Directive, "`ifdef"),
             N(TK::Identifier, "SCR1_TRGT_FPGA_INTEL_MAX10"),
         }),
-      L(kIndent, PP::kAlwaysExpand,
+      L(kIndent, PP::kTabularAlignment,
         {
             N(TK::OpenParenthesis, "("),
             N(TK::Star, "*"),

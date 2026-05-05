@@ -38,6 +38,20 @@ using Line = UnwrappedLine<Token>;
          text == "`undef" || text == "`undefineall";
 }
 
+[[nodiscard]] auto requiresTabularAlignment(Token tok) -> bool {
+  return tok.kind == TK::InputKeyword || tok.kind == TK::OutputKeyword ||
+         tok.kind == TK::LogicKeyword;
+}
+
+[[nodiscard]] auto requiresTabularAlignment(const Line& line) -> bool {
+  for (const auto& token : line.tokens) {
+    if (requiresTabularAlignment(token)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 class SVParser {
  public:
   SVParser(std::span<const Token> tokens, const FormatStyle& style)
@@ -81,7 +95,9 @@ class SVParser {
       return;
     }
     line_.indentation_spaces = indent_level_ * style_->indentation_spaces;
-    line_.partition_policy = policy;
+    line_.partition_policy =
+        requiresTabularAlignment(line_) ? PartitionPolicy::kTabularAlignment
+                                        : policy;
     lines_.push_back(std::move(line_));
     line_ = Line{};
   }
