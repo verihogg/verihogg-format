@@ -50,7 +50,7 @@ static constexpr size_t kMinGroupSize = 2;
     cell_start = end;
   };
 
-  size_t i = 1;
+  size_t i = 0;
   while (i < tokens.size()) {
     const FormatToken& ft = tokens[i];
     if (ft.balancing == GroupBalancing::kOpen) {
