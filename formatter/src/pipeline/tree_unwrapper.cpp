@@ -237,9 +237,38 @@ class SVParser {
         break;
 
       default:
-        consumeUntilSemi();
+        if (at(TK::Identifier) &&
+            ((at(TK::Identifier, 1) && at(TK::OpenParenthesis, 2)) ||
+             at(TK::Hash, 1))) {
+          parseInstantiation();
+        } else {
+          consumeUntilSemi();
+        }
         break;
     }
+  }
+
+  // TypeName [#(...)] InstanceName (...);
+  auto parseInstantiation() -> void {
+    consumeInto(line_);  // type name
+    while (at(TK::Directive)) {
+      addLine();
+      parseDirectiveLine();
+    }
+    if (at(TK::Hash)) {
+      consumeInto(line_);
+      consumeBalancedInto(TK::OpenParenthesis, TK::CloseParenthesis, line_);
+      while (at(TK::Directive)) {
+        addLine();
+        parseDirectiveLine();
+      }
+    }
+    consumeInto(line_);  // instance name
+    parsePortListInto(line_);
+    if (at(TK::Semicolon)) {
+      consumeInto(line_);
+    }
+    addLine(PartitionPolicy::kFitOnLineElseExpand);
   }
 
   // `ifdef / `define / `include / ... — consume to end of source line
@@ -488,7 +517,11 @@ class SVParser {
 
     ++indent_level_;
     while (!at(TK::EndCaseKeyword) && !at(TK::EndOfFile)) {
-      parseCaseItem();
+      if (at(TK::Directive)) {
+        parseDirectiveLine();
+      } else {
+        parseCaseItem();
+      }
     }
     --indent_level_;
 
@@ -503,7 +536,8 @@ class SVParser {
         consumeInto(line_);
       }
     } else {
-      while (!at(TK::Colon) && !at(TK::EndOfFile) && !at(TK::EndCaseKeyword)) {
+      while (!at(TK::Colon) && !at(TK::Directive) &&
+             !at(TK::EndOfFile) && !at(TK::EndCaseKeyword)) {
         consumeInto(line_);
       }
       if (at(TK::Colon)) {
