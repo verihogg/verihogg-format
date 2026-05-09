@@ -1,0 +1,102 @@
+#include <data/lex_context.h>
+#include <gtest/gtest.h>
+#include <slang/parsing/TokenKind.h>
+#include <slang/syntax/SyntaxKind.h>
+#include <slang/syntax/SyntaxNode.h>
+#include <slang/syntax/SyntaxTree.h>
+#include <slang/text/SourceManager.h>
+
+#include <filesystem>
+#include <fstream>
+#include <string>
+
+#include "formatter.h"
+
+namespace {
+
+void compareTrees(const slang::syntax::SyntaxNode& a,
+                  const slang::syntax::SyntaxNode& b) {
+  ASSERT_EQ(a.kind, b.kind)
+      << "Node kind mismatch: " << slang::syntax::toString(a.kind) << " vs "
+      << slang::syntax::toString(b.kind);
+  ASSERT_EQ(a.getChildCount(), b.getChildCount())
+      << "Child count mismatch in node " << slang::syntax::toString(a.kind);
+
+  for (uint32_t i = 0; i < a.getChildCount(); i++) {
+    auto aNode = a.childNode(i);
+    auto bNode = b.childNode(i);
+
+    if (aNode && bNode) {
+      compareTrees(*aNode, *bNode);
+    } else if (!aNode && !bNode) {
+      auto aTok = a.childToken(i);
+      auto bTok = b.childToken(i);
+      EXPECT_EQ(aTok.kind, bTok.kind)
+          << "Token kind mismatch at child " << i << " of "
+          << slang::syntax::toString(a.kind) << ": '" << aTok.rawText()
+          << "' vs '" << bTok.rawText() << "'";
+      EXPECT_EQ(aTok.rawText(), bTok.rawText())
+          << "Token text mismatch at child " << i << " of "
+          << slang::syntax::toString(a.kind);
+    } else {
+      ADD_FAILURE() << "Child type mismatch at index " << i << " of node "
+                    << slang::syntax::toString(a.kind)
+                    << " (one is a node, other is a token)";
+    }
+  }
+}
+
+auto collectSvFiles() -> std::vector<std::string> {
+  namespace fs = std::filesystem;
+  std::vector<std::string> files;
+  for (const auto& entry : fs::recursive_directory_iterator(SCR1_DIR "/src")) {
+    if (entry.path().extension() == ".sv") {
+      files.push_back(entry.path().string());
+    }
+  }
+  std::ranges::sort(files);
+  return files;
+}
+
+}  // namespace
+
+class Scr1IntegrationTest : public ::testing::TestWithParam<std::string> {
+ private:
+  slang::SourceManager sm;
+
+ protected:
+  void SetUp() override {
+    ASSERT_FALSE(sm.addUserDirectories(SCR1_DIR "/src/includes"))
+        << "Could not add scr1 include directory";
+  }
+
+  void assertFormatPreservesTree(const std::string& path) {
+    std::ifstream f(path);
+    ASSERT_TRUE(f.is_open()) << "Cannot open: " << path;
+    std::string original{std::istreambuf_iterator<char>(f),
+                         std::istreambuf_iterator<char>()};
+
+    LexContext ctx;
+    auto tokens = ctx.lex_string(original);
+    ASSERT_FALSE(tokens.empty()) << "Failed to lex: " << path;
+
+    auto result = format::format(tokens, format::FormatStyle{});
+
+    // fromText for both so neither expands `include / macros — same pipeline
+    auto origTree = slang::syntax::SyntaxTree::fromText(original, sm, path);
+    auto fmtTree = slang::syntax::SyntaxTree::fromText(
+        result.formatted_text, sm, path + "_fmt");
+
+    compareTrees(origTree->root(), fmtTree->root());
+  }
+};
+
+TEST_P(Scr1IntegrationTest, FormatPreservesTree) {
+  assertFormatPreservesTree(GetParam());
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    AllSvFiles, Scr1IntegrationTest, testing::ValuesIn(collectSvFiles()),
+    [](const testing::TestParamInfo<std::string>& info) {
+      return std::filesystem::path(info.param).stem().string();
+    });

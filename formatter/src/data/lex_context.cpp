@@ -20,10 +20,10 @@ auto LexContext::lex_file(std::string_view path)
 
   while (true) {
     auto tok = lexer.lex();
+    tokens.push_back(tok);
     if (tok.kind == slang::parsing::TokenKind::EndOfFile) {
       break;
     }
-    tokens.push_back(tok);
   }
   return tokens;
 }
@@ -37,10 +37,10 @@ auto LexContext::lex_string(std::string_view src)
 
   while (true) {
     auto tok = lexer.lex();
+    tokens.push_back(tok);
     if (tok.kind == slang::parsing::TokenKind::EndOfFile) {
       break;
     }
-    tokens.push_back(tok);
   }
   return tokens;
 }

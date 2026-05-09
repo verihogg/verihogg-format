@@ -45,9 +45,15 @@ install(TARGETS ${PROJECT_NAME}
 find_package(GTest QUIET)
 if(GTest_FOUND)
   enable_testing()
-  message(STATUS "GTest_FOUND: ${GTest_FOUND}")
-  message(STATUS "TEST_SRC: ${TEST_SRC}")
-  message(STATUS "LIB_SRC: ${LIB_SRC}")
+
+  include(FetchContent)
+  FetchContent_Declare(
+    scr1
+    GIT_REPOSITORY https://github.com/syntacore/scr1.git
+    GIT_TAG        master
+    GIT_SHALLOW    TRUE
+  )
+  FetchContent_MakeAvailable(scr1)
 
   file(GLOB_RECURSE LIB_SRC formatter/src/**.cpp)
   list(FILTER LIB_SRC EXCLUDE REGEX ".*/main\\.cpp$")
@@ -61,6 +67,7 @@ if(GTest_FOUND)
   if(TEST_SRC)
     add_executable(verihogg-tests ${TEST_SRC})
     target_link_libraries(verihogg-tests PRIVATE verihogg-format-lib GTest::gtest GTest::gtest_main)
+    target_compile_definitions(verihogg-tests PRIVATE SCR1_DIR="${scr1_SOURCE_DIR}")
     include(GoogleTest)
     gtest_discover_tests(verihogg-tests DISCOVERY_MODE PRE_TEST)
   endif()
