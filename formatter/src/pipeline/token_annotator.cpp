@@ -561,6 +561,7 @@ auto implComputeInterTokenInfo(std::span<FormatToken> tokens) -> void {
     tokens[i].before = {
         .spaces_required = implSpacesRequired(p),
         .break_penalty = implBreakPenalty(p),
+        .comment_spaces = 0,
         .break_decision = implBreakDecision(p),
     };
   }

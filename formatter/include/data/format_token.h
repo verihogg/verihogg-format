@@ -13,6 +13,7 @@ enum class BreakDecision : uint8_t {
 struct InterTokenInfo {
   size_t spaces_required;
   size_t break_penalty;
+  size_t comment_spaces;
   BreakDecision break_decision;
 };
 
