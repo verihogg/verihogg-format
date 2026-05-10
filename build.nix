@@ -19,4 +19,8 @@ pkgs.stdenv.mkDerivation {
     license = licenses.mit;
     platforms = platforms.linux;
   };
+
+  preConfigure=''
+    rm -rf build
+  '';
 }
