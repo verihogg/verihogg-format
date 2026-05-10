@@ -88,6 +88,14 @@ enum class TokenType : uint8_t {
   // Комментарии
   kLineComment,
   kBlockComment,
+
+  kIntegerBase,
+  kEdgeKeyword,
+  kAssignKeyword,
+  kDirective,
+  kTernaryOperator,
+  kSvaBinaryOperator,
+  kSvaKeyword
 };
 
 struct FormatToken {
