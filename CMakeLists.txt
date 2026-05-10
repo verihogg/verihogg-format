@@ -7,15 +7,13 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose build type" FORCE)
 endif()
 
-# Use C++17
+# Use C++20
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 file(GLOB_RECURSE SRC formatter/src/**.cpp)
-
-list(FILTER SRC EXCLUDE REGEX ".*/tokenizer\\.cpp$")
 
 find_package(slang REQUIRED)
 find_package(Microsoft.GSL CONFIG REQUIRED)
@@ -25,21 +23,12 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 add_executable(${PROJECT_NAME} ${SRC})
-add_executable(verihogg-tokenizer formatter/src/tokenizer.cpp)
 
 target_include_directories(${PROJECT_NAME}
   PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/formatter/include>
 )
-
 target_link_libraries(${PROJECT_NAME} PRIVATE slang::slang Microsoft.GSL::GSL)
-
-target_include_directories(verihogg-tokenizer
-  PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/formatter/include>
-)
-
-target_link_libraries(verihogg-tokenizer PRIVATE slang::slang)
 
 if(MSVC)
   target_compile_options(${PROJECT_NAME} PRIVATE /W4 /bigobj)
@@ -74,12 +63,10 @@ if(GTest_FOUND)
 
   file(GLOB_RECURSE LIB_SRC formatter/src/**.cpp)
   list(FILTER LIB_SRC EXCLUDE REGEX ".*/main\\.cpp$")
-  list(FILTER LIB_SRC EXCLUDE REGEX ".*/tokenizer\\.cpp$")
 
   add_library(verihogg-format-lib STATIC ${LIB_SRC})
   target_include_directories(verihogg-format-lib PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/formatter/include>)
-
   target_link_libraries(verihogg-format-lib PUBLIC slang::slang)
 
   file(GLOB_RECURSE TEST_SRC formatter/tests/*.cpp)
