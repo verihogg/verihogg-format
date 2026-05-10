@@ -81,6 +81,16 @@ class PrintState {
     finishLine();
   }
 
+  auto appendCommentToLastLine(std::string_view text,
+                               size_t spaces_before) -> void {
+    if (lines_.empty()) {
+      return;
+    }
+    auto& last = lines_.back().text;
+    last.append(spaces_before, ' ');
+    last.append(text);
+  }
+
   auto emitDetachedComment(std::string_view text, size_t indent) -> void {
     finishLineIfNeeded();
     size_t start = 0;
@@ -190,6 +200,7 @@ auto preserveBlankLines(size_t newline_count, PrintState& state) -> void {
 }
 
 [[nodiscard]] auto emitLeadingTrivia(const Token& token, size_t indent,
+                                     size_t trailing_comment_spaces,
                                      PrintState& state) -> TriviaEffect {
   TriviaEffect effect;
   bool seen_newline = false;
@@ -211,7 +222,11 @@ auto preserveBlankLines(size_t newline_count, PrintState& state) -> void {
           continue;
         }
         if (!seen_newline) {
-          state.attachLineComment(text, indent);
+          if (trailing_comment_spaces > 0) {
+            state.appendCommentToLastLine(text, trailing_comment_spaces);
+          } else {
+            state.attachLineComment(text, indent);
+          }
         } else {
           preserveBlankLines(newline_count, state);
           state.emitDetachedComment(text, indent);
@@ -247,25 +262,6 @@ auto preserveBlankLines(size_t newline_count, PrintState& state) -> void {
   return effect;
 }
 
-auto printTokenFlat(const FormatToken& token, size_t indent,
-                    size_t spaces_before, bool first_token,
-                    PrintState& state) -> void {
-  const TriviaEffect trivia = emitLeadingTrivia(token.token, indent, state);
-
-  if (first_token || state.currentLineEmpty()) {
-    state.finishLineIfNeeded();
-    state.ensureIndent(indent);
-  } else {
-    state.appendSpaces(spaces_before);
-  }
-
-  for (const std::string_view comment : trivia.inline_comments) {
-    state.appendInlineComment(comment);
-  }
-
-  state.appendToken(token.token.rawText());
-}
-
 auto printLine(const UnwrappedLine<FormatToken>& line,
                PrintState& state) -> void {
   if (line.tokens.empty()) {
@@ -274,10 +270,27 @@ auto printLine(const UnwrappedLine<FormatToken>& line,
 
   const size_t indent = line.indentation_spaces;
   for (size_t i = 0; i < line.tokens.size(); ++i) {
-    const size_t spaces_before =
-        (i == 0) ? 0 : line.tokens[i].before.spaces_required;
-    printTokenFlat(line.tokens[i], indent, spaces_before, i == 0, state);
+    const FormatToken& ft = line.tokens[i];
+    const size_t spaces_before = (i == 0) ? 0 : ft.before.spaces_required;
+
+    const size_t tcs = (i == 0) ? ft.before.comment_spaces : 0;
+
+    const TriviaEffect trivia = emitLeadingTrivia(ft.token, indent, tcs, state);
+
+    if (i == 0 || state.currentLineEmpty()) {
+      state.finishLineIfNeeded();
+      state.ensureIndent(indent);
+    } else {
+      state.appendSpaces(spaces_before);
+    }
+
+    for (const std::string_view comment : trivia.inline_comments) {
+      state.appendInlineComment(comment);
+    }
+
+    state.appendToken(ft.token.rawText());
   }
+
   state.finishLineIfNeeded();
 }
 
