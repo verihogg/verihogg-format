@@ -1,5 +1,6 @@
 #include "pipeline/token_annotator.h"
 
+#include <fmt/core.h>
 #include <slang/parsing/Token.h>
 #include <slang/parsing/TokenKind.h>
 
@@ -31,7 +32,6 @@ struct Penalty {
 };
 
 // -- Классификация скобок ---------------------------------------------------
-
 [[nodiscard]] auto groupBalancing(TK k) -> GroupBalancing {
   switch (k) {
     case TK::OpenParenthesis:
@@ -459,6 +459,44 @@ auto TokenAnnotator::determineTokenTypes(std::span<FormatToken> tokens) const
         continue;
       }
 
+      case TK::ApostropheOpenBrace:
+        ft.type = TokenType::kUnknown;
+        ctx.push(Context::kConcatenation);
+        continue;
+
+      case TK::Directive:
+        ft.type = TokenType::kDirective;
+        continue;
+
+      case TK::OrMinusArrow:  // |->
+        ft.type = TokenType::kBinaryOperator;
+        continue;
+
+      case TK::AssignKeyword:
+        ft.type = TokenType::kAssignKeyword;
+        continue;
+
+      case TK::PosEdgeKeyword:
+      case TK::NegEdgeKeyword:
+        ft.type = TokenType::kEdgeKeyword;
+        continue;
+
+      case TK::AssertKeyword:
+      case TK::PropertyKeyword:
+      case TK::IffKeyword:
+      case TK::DisableKeyword:
+        ft.type = TokenType::kSvaKeyword;
+        continue;
+
+      case TK::Question:
+        ft.type = TokenType::kTernaryOperator;
+        continue;
+
+      case TK::IntegerBase:  // 4'b, 8'h
+        ft.type = TokenType::kIntegerBase;
+        continue;
+
+      case TK::UnbasedUnsizedLiteral:  // '0 '1 'x 'z
       default:
         ft.type = TokenType::kUnknown;
         continue;
@@ -475,6 +513,66 @@ namespace {
 auto implSpacesRequired(TokenPair p) -> size_t {
   const FormatToken& left = *p.left;
   const FormatToken& right = *p.right;
+
+  const TK lk = left.token.kind;
+  const TK rk = right.token.kind;
+
+  if (rk == TK::IntegerBase) {
+    return 0;
+  }  // "2" + "'b" → "2'b"
+  if (lk == TK::IntegerBase) {
+    return 0;
+  }  // "'b" + "00" → "'b00"
+
+  if (lk == TK::IntegerBase && rk == TK::UnbasedUnsizedLiteral) {
+    return 0;
+  }
+  if (lk == TK::UnbasedUnsizedLiteral && rk == TK::UnbasedUnsizedLiteral) {
+    return 0;
+  }
+
+  if (rk == TK::ApostropheOpenBrace) {
+    return 0;
+  }  // "logic" + "'{"
+  if (lk == TK::ApostropheOpenBrace) {
+    return 0;
+  }  // "'{" + "..."
+
+  if (rk == TK::Apostrophe) {
+    return 0;
+  }  // "logic" + "'"
+  if (lk == TK::Apostrophe) {
+    return 0;
+  }  // "'" + "("
+
+  if (right.token.kind == TK::Question &&
+      (left.type == TokenType::kIntegerBase ||
+       left.token.kind == TK::Question)) {
+    return 0;
+  }
+  if (left.type == TokenType::kTernaryOperator ||
+      right.type == TokenType::kTernaryOperator) {
+    return 1;
+  }
+
+  if (right.token.kind == TK::Apostrophe &&
+      (left.token.kind == TK::Identifier || left.type == TokenType::kTypeName ||
+       left.token.kind == TK::IntegerLiteral)) {
+    return 0;  // type'(...) for cast
+  }
+
+  if (left.token.kind == TK::Apostrophe) {
+    return 0;  // "'(" and "'0", "'1", etc.
+  }
+  if (right.token.kind == TK::Question &&
+      (left.type == TokenType::kIntegerBase ||
+       left.token.kind == TK::Question)) {
+    return 0;  // "5'b?" stays as "5'b?" not "5'b ?"
+  }
+  if (left.token.kind == TK::IntegerLiteral &&
+      right.token.kind == TK::Identifier) {
+    return 0;
+  }
 
   if (right.type == TokenType::kComma || right.type == TokenType::kSemicolon) {
     return 0;
@@ -540,6 +638,10 @@ auto implBreakDecision(TokenPair p) -> BreakDecision {
   if (implSpacesRequired(p) == 0 && right.balancing != GroupBalancing::kClose) {
     return BreakDecision::kMustNotBreak;
   }
+  if (right.type == TokenType::kDirective ||
+      left.type == TokenType::kDirective) {
+    return BreakDecision::kMustBreak;
+  }
   if (left.type == TokenType::kBeginKeyword) {
     return BreakDecision::kMustBreak;
   }
@@ -548,6 +650,9 @@ auto implBreakDecision(TokenPair p) -> BreakDecision {
   }
   if (left.type == TokenType::kSemicolon && right.nesting_level == 0) {
     return BreakDecision::kMustBreak;
+  }
+  if (left.type == TokenType::kAssignKeyword) {
+    return BreakDecision::kMustNotBreak;
   }
   return BreakDecision::kUndecided;
 }
@@ -558,6 +663,18 @@ auto implComputeInterTokenInfo(std::span<FormatToken> tokens) -> void {
   }
   for (size_t i = 1; i < tokens.size(); ++i) {
     const TokenPair p{.left = &tokens[i - 1], .right = &tokens[i]};
+    const size_t sp = implSpacesRequired(p);
+    if (sp > 0) {
+      const auto lk = p.left->token.kind;
+      const auto rk = p.right->token.kind;
+      if (rk == TK::IntegerBase || lk == TK::IntegerBase ||
+          rk == TK::ApostropheOpenBrace || lk == TK::ApostropheOpenBrace) {
+        fmt::print("SPACE BETWEEN: left={} right={} spaces={}\n",
+                   slang::parsing::toString(lk), slang::parsing::toString(rk),
+                   sp);
+      }
+    }
+
     tokens[i].before = {
         .spaces_required = implSpacesRequired(p),
         .break_penalty = implBreakPenalty(p),
