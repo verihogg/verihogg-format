@@ -1,8 +1,7 @@
 # verihogg-format
 
-> Форматтер кода для SystemVerilog.
-
-**verihogg-format** форматирует SystemVerilog стандарта IEEE 1800-2017, используя парсер slang и переносит строки для оптимальной читаемости.
+**verihogg-format** is a code formatter for SystemVerilog (IEEE 1800-2017).  
+The project automatically reformats source code: indentation, spacing, tabular alignment of ports and declarations, and line wrapping.
 
 ```
 verihogg-format --inplace src/**/*.sv
@@ -10,139 +9,33 @@ verihogg-format --inplace src/**/*.sv
 
 ---
 
-## Установка
+## Command-line options
 
-Для сборки нужен [Nix](https://nixos.org/download/).
+| Option                                  | Description                                                         |
+| --------------------------------------- | ------------------------------------------------------------------- |
+| `-n, --inplace`                         | Overwrite source files instead of printing to stdout.               |
+| `-c, --column_limit N`                  | Maximum line length (default: `100`).                               |
+| `-i, --indentation_spaces N`            | Spaces per indent level (default: `2`).                             |
+| `-w, --wrap_spaces N`                   | Extra indent for wrapped lines (default: `4`).                      |
+| `-b, --line_break_penalty N`            | Penalty for breaking a line (default: `2`).                         |
+| `-p, --over_column_limit_penalty N`     | Penalty per character over the column limit (default: `100`).       |
+| `-t, --line_terminator MODE`            | Line ending style: `auto` \| `lf` \| `crlf` (default: `auto`).     |
+| `-h, --help`                            | Show help and exit.                                                 |
 
-```bash
-git clone https://github.com/g4rry1/kyrs.git
-cd kyrs/g4rry
-nix-shell
-cmake -B build
-cmake --build build
-```
+### Exit codes
 
-Бинарник окажется в `build/bin/verihogg-format`. Добавьте путь в `$PATH` или вызывайте напрямую.
-
----
-
-## Использование
-
-```bash
-# форматировать и вывести в stdout
-verihogg-format mymodule.sv
-
-# форматировать несколько файлов на месте
-verihogg-format --inplace mymodule.sv
-verihogg-format --inplace src/**/*.sv
-
-# прочитать из stdin и вывести в stdout
-cat mymodule.sv | verihogg-format
-```
-
-### Коды выхода
-
-| Код | Значение                             |
-| --- | ------------------------------------ |
-| `0` | Успех. Форматирование завершено.     |
-| `1` | Ошибка парсинга или обработки файла. |
+| Code | Meaning                              |
+| ---- | ------------------------------------ |
+| `0`  | Formatting complete.                 |
+| `1`  | Invalid command-line argument.       |
 
 ---
 
-## Параметры командной строки
+## Example
 
-| Параметр                        | Описание                                                        |
-| ------------------------------- | --------------------------------------------------------------- |
-| `--inplace`                     | Перезаписать исходные файлы вместо вывода в stdout.             |
-| `--column_limit N`              | Максимальная длина строки (дефолт: `100`).                      |
-| `--indentation_spaces N`        | Пробелов на уровень отступа (дефолт: `2`).                      |
-| `--wrap_spaces N`               | Дополнительный отступ при переносе строки (дефолт: `4`).        |
-| `--line_break_penalty N`        | Штраф за перенос строки (дефолт: `2`).                          |
-| `--over_column_limit_penalty N` | Штраф за символ сверх лимита (дефолт: `100`).                   |
-| `--line_terminator MODE`        | Символ конца строки: `auto` \| `lf` \| `crlf` (дефолт: `auto`). |
+The open-source processor [SCR1](https://github.com/syntacore/scr1) — a RISC-V core by Syntacore — formats with verihogg-format without issues. Below is a fragment from the ALU module before and after running with default settings:
 
-### Примеры
-
-```bash
-# форматировать с отступом в 4 пробела
-verihogg-format --inplace --indentation_spaces 4 mymodule.sv
-
-# установить лимит в 120 символов
-verihogg-format --inplace --column_limit 120 mymodule.sv
-
-# форматировать со сложными настройками
-verihogg-format --inplace \
-  --column_limit 100 \
-  --indentation_spaces 2 \
-  --wrap_spaces 4 \
-  --line_break_penalty 2 \
-  --over_column_limit_penalty 100 \
-  src/**/*.sv
-```
-
----
-
-## Архитектура
-
-Форматтер построен в виде pipeline из нескольких стадий:
-
-1. **Лексический анализ** — токенизация исходного кода с помощью slang
-2. **Аннотирование токенов** — определение типов токенов и контекста
-3. **Unwrapping** — развёртывание структуры в логические строки
-4. **Выравнивание** — табулярное выравнивание портов и объявлений
-5. **Поиск разбиений** — оптимизация переносов строк с использованием штрафов
-6. **Печать** — генерация отформатированного кода
-
----
-
-## Разработка
-
-### Сборка
-
-```bash
-nix-shell
-cmake -B build
-cmake --build build
-```
-
-### Тестирование
-
-Проект включает набор тестов на основе Google Test. Для их запуска требуется GTest:
-
-```bash
-cmake -B build
-cmake --build build
-ctest --test-dir build
-```
-
-Тесты используют исходные файлы из проекта [SCR1](https://github.com/syntacore/scr1) (RISC-V ядро от Syntacore).
-
-### Структура проекта
-
-```
-formatter/
-├── include/           # Заголовочные файлы
-│   ├── cli/          # Парсинг аргументов командной строки
-│   ├── data/         # Структуры данных
-│   └── pipeline/     # Стадии форматирования
-├── src/              # Исходный код
-│   ├── main.cpp      # Точка входа
-│   ├── formatter.cpp # Главная логика
-│   ├── cli/
-│   ├── data/
-│   └── pipeline/
-└── tests/            # Тесты
-```
-
----
-
-## Пример
-
-Опенсорсный процессор [SCR1](https://github.com/syntacore/scr1) — RISC-V ядро
-от Syntacore — форматируется verihogg-format без проблем. Ниже фрагмент
-из модуля ALU до и после запуска с дефолтными настройками:
-
-**До**
+**Before**
 
 ```verilog
 module scr1_pipe_ialu #(parameter SCR1_XLEN = 32)(
@@ -163,7 +56,7 @@ always_comb begin
 end
 ```
 
-**После**
+**After**
 
 ```verilog
 module scr1_pipe_ialu #(parameter SCR1_XLEN = 32) (
@@ -188,18 +81,145 @@ output    logic                        cmp_res
 
 ---
 
-## Требования
+## Project structure
 
-- C++20 compatible compiler
-- slang library (SystemVerilog parser)
-- Microsoft GSL (Guidelines Support Library)
-- CMake 3.20+
-- (опционально) Google Test для тестов
-
-При использовании Nix все зависимости устанавливаются автоматически.
+- `formatter/include/` – header files (data structures, pipeline stages, CLI).
+- `formatter/src/` – implementation: `main.cpp`, `formatter.cpp`, pipeline stages.
+- `formatter/tests/` – GTest-based tests.
+- `default.nix` / `build.nix` / `shell.nix` – Nix definitions for build and development shell.
 
 ---
 
-## Лицензия
+## Usage
+
+### Recommended: via prebuilt Docker image
+
+You can use the prebuilt image published to GitHub Container Registry:
+
+#### Single file
+
+```bash
+cd /path/to/sv
+docker run --rm -v "$(pwd)":/data -w /data ghcr.io/verihogg/verihogg-format:latest verihogg-format file.sv
+```
+
+#### Using filelist (.f)
+
+The recommended way to format entire projects is using a filelist.
+
+Example `files.f`:
+
+```
+rtl/pkg/common_pkg.sv
+rtl/interfaces/bus_if.sv
+rtl/core/top.sv
+rtl/core/alu.sv
+rtl/core/regfile.sv
+```
+
+Run with Docker:
+
+```bash
+cd /path/to/project
+docker run --rm -v "$(pwd)":/data -w /data ghcr.io/verihogg/verihogg-format:latest \
+  verihogg-format --inplace -f files.f
+```
+
+#### Multiple files or wildcards
+
+```bash
+# Multiple files
+docker run --rm -v "$(pwd)":/data -w /data ghcr.io/verihogg/verihogg-format:latest \
+  verihogg-format file1.sv file2.sv file3.sv
+
+# All .sv files in current directory
+docker run --rm -v "$(pwd)":/data -w /data ghcr.io/verihogg/verihogg-format:latest \
+  sh -c 'verihogg-format --inplace *.sv'
+```
+
+---
+
+## Build and run locally
+
+### 1. Build from source (Nix)
+
+Use Nix to build the project and all required dependencies in a reproducible environment.
+
+```bash
+git clone https://github.com/verihogg/verihogg-format.git
+cd verihogg-format
+nix-build
+```
+
+This creates a `result` symlink pointing to the built output in the Nix store.
+
+### 2. Run from console (local build)
+
+#### Single file
+
+```bash
+./result/bin/verihogg-format mymodule.sv
+```
+
+#### In-place formatting
+
+```bash
+./result/bin/verihogg-format --inplace mymodule.sv
+./result/bin/verihogg-format --inplace src/**/*.sv
+```
+
+#### stdin / stdout
+
+```bash
+cat mymodule.sv | ./result/bin/verihogg-format
+```
+
+#### Custom settings
+
+```bash
+./result/bin/verihogg-format --inplace \
+  --column_limit 120 \
+  --indentation_spaces 4 \
+  src/**/*.sv
+```
+
+You can run `./result/bin/verihogg-format --help` to see all available options.
+
+### Requirements (without Nix)
+
+If you don't use Nix, install the following manually:
+
+- C++20 compatible compiler
+- CMake 3.20+
+- [slang](https://github.com/MikePopoloski/slang) — SystemVerilog parser
+- [Microsoft GSL](https://github.com/microsoft/GSL) — Guidelines Support Library
+- Google Test (optional, for tests)
+
+Then build:
+
+```bash
+cmake -B build
+cmake --build build
+```
+
+Binary will be at `build/bin/verihogg-format`.
+
+---
+
+## Testing
+
+Tests use source files from the [SCR1](https://github.com/syntacore/scr1) RISC-V core project (by Syntacore) and are built with the Google Test framework.
+
+To run tests:
+
+```bash
+cmake -B build
+cmake --build build
+ctest --output-on-failure --test-dir build
+```
+
+---
+
+## License
 
 MIT
