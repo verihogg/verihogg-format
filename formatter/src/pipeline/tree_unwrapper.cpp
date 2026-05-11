@@ -95,9 +95,9 @@ class SVParser {
       return;
     }
     line_.indentation_spaces = indent_level_ * style_->indentation_spaces;
-    line_.partition_policy =
-        requiresTabularAlignment(line_) ? PartitionPolicy::kTabularAlignment
-                                        : policy;
+    line_.partition_policy = requiresTabularAlignment(line_)
+                                 ? PartitionPolicy::kTabularAlignment
+                                 : policy;
     lines_.push_back(std::move(line_));
     line_ = Line{};
   }
@@ -536,8 +536,8 @@ class SVParser {
         consumeInto(line_);
       }
     } else {
-      while (!at(TK::Colon) && !at(TK::Directive) &&
-             !at(TK::EndOfFile) && !at(TK::EndCaseKeyword)) {
+      while (!at(TK::Colon) && !at(TK::Directive) && !at(TK::EndOfFile) &&
+             !at(TK::EndCaseKeyword)) {
         consumeInto(line_);
       }
       if (at(TK::Colon)) {

@@ -81,8 +81,8 @@ class PrintState {
     finishLine();
   }
 
-  auto appendCommentToLastLine(std::string_view text,
-                               size_t spaces_before) -> void {
+  auto appendCommentToLastLine(std::string_view text, size_t spaces_before)
+      -> void {
     if (lines_.empty()) {
       return;
     }
@@ -100,7 +100,7 @@ class PrintState {
       const size_t line_end =
           (end == std::string_view::npos) ? text.size() : end;
       size_t part_end = line_end;
-      if (part_end > start && text[part_end - 1] == '\r') {
+      if (part_end > start && text.at(part_end - 1) == '\r') {
         --part_end;
       }
 
@@ -199,8 +199,12 @@ auto preserveBlankLines(size_t newline_count, PrintState& state) -> void {
   }
 }
 
-[[nodiscard]] auto emitLeadingTrivia(const Token& token, size_t indent,
-                                     size_t trailing_comment_spaces,
+struct Indent {
+  size_t indent;
+  size_t trailing_comment_spaces;
+};
+
+[[nodiscard]] auto emitLeadingTrivia(const Token& token, Indent indent,
                                      PrintState& state) -> TriviaEffect {
   TriviaEffect effect;
   bool seen_newline = false;
@@ -222,14 +226,14 @@ auto preserveBlankLines(size_t newline_count, PrintState& state) -> void {
           continue;
         }
         if (!seen_newline) {
-          if (trailing_comment_spaces > 0) {
-            state.appendCommentToLastLine(text, trailing_comment_spaces);
+          if (indent.trailing_comment_spaces > 0) {
+            state.appendCommentToLastLine(text, indent.trailing_comment_spaces);
           } else {
-            state.attachLineComment(text, indent);
+            state.attachLineComment(text, indent.indent);
           }
         } else {
           preserveBlankLines(newline_count, state);
-          state.emitDetachedComment(text, indent);
+          state.emitDetachedComment(text, indent.indent);
         }
         seen_newline = true;
         newline_count = 0;
@@ -253,7 +257,7 @@ auto preserveBlankLines(size_t newline_count, PrintState& state) -> void {
       effect.inline_comments.push_back(text);
     } else {
       preserveBlankLines(newline_count, state);
-      state.emitDetachedComment(text, indent);
+      state.emitDetachedComment(text, indent.indent);
       seen_newline = true;
       newline_count = 0;
     }
@@ -262,20 +266,21 @@ auto preserveBlankLines(size_t newline_count, PrintState& state) -> void {
   return effect;
 }
 
-auto printLine(const UnwrappedLine<FormatToken>& line,
-               PrintState& state) -> void {
+auto printLine(const UnwrappedLine<FormatToken>& line, PrintState& state)
+    -> void {
   if (line.tokens.empty()) {
     return;
   }
 
   const size_t indent = line.indentation_spaces;
   for (size_t i = 0; i < line.tokens.size(); ++i) {
-    const FormatToken& ft = line.tokens[i];
+    const FormatToken& ft = line.tokens.at(i);
     const size_t spaces_before = (i == 0) ? 0 : ft.before.spaces_required;
 
     const size_t tcs = (i == 0) ? ft.before.comment_spaces : 0;
 
-    const TriviaEffect trivia = emitLeadingTrivia(ft.token, indent, tcs, state);
+    const TriviaEffect trivia =
+        emitLeadingTrivia(ft.token, Indent(indent, tcs), state);
 
     if (i == 0 || state.currentLineEmpty()) {
       state.finishLineIfNeeded();

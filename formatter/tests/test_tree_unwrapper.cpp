@@ -95,8 +95,8 @@ void PrintTo(const TokSnap& tok, std::ostream* os) {
 }
 
 void PrintTo(const LineSnap& line, std::ostream* os) {
-  *os << "{indent=" << line.indent << ", policy="
-      << policyName(line.policy) << ", tokens=";
+  *os << "{indent=" << line.indent << ", policy=" << policyName(line.policy)
+      << ", tokens=";
   ::testing::internal::UniversalPrint(line.tokens, os);
   *os << "}";
 }

@@ -88,8 +88,8 @@ static constexpr size_t kCommentColumnGap = 8;
 }
 
 [[nodiscard]] static auto has_comment(
-    const std::vector<UnwrappedLine<FormatToken>>& lines,
-    size_t line_idx) -> bool {
+    const std::vector<UnwrappedLine<FormatToken>>& lines, size_t line_idx)
+    -> bool {
   const size_t next_idx = line_idx + 1;
   if (next_idx >= lines.size()) {
     return false;
