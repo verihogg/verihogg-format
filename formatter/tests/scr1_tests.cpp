@@ -48,9 +48,17 @@ void compareTrees(const slang::syntax::SyntaxNode& a,
 
 auto collectSvFiles() -> std::vector<std::string> {
   namespace fs = std::filesystem;
+  if (std::string(SCR1_DIR).empty()) {
+    return {};
+  }
   std::vector<std::string> files;
-  for (const auto& entry : fs::recursive_directory_iterator(SCR1_DIR "/src")) {
-    if (entry.path().extension() == ".sv") {
+  fs::path dir{SCR1_DIR "/src"};
+  if (!fs::exists(dir)) {
+    return {};
+  }
+  for (const auto& entry : fs::recursive_directory_iterator(dir)) {
+    if (entry.path().extension() == ".sv" ||
+        entry.path().extension() == ".svh") {
       files.push_back(entry.path().string());
     }
   }
@@ -84,19 +92,23 @@ class Scr1IntegrationTest : public ::testing::TestWithParam<std::string> {
 
     // fromText for both so neither expands `include / macros — same pipeline
     auto origTree = slang::syntax::SyntaxTree::fromText(original, sm, path);
-    auto fmtTree = slang::syntax::SyntaxTree::fromText(
-        result.formatted_text, sm, path + "_fmt");
+    auto fmtTree = slang::syntax::SyntaxTree::fromText(result.formatted_text,
+                                                       sm, path + "_fmt");
 
     compareTrees(origTree->root(), fmtTree->root());
   }
 };
 
+GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(Scr1IntegrationTest);
+
 TEST_P(Scr1IntegrationTest, FormatPreservesTree) {
   assertFormatPreservesTree(GetParam());
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    AllSvFiles, Scr1IntegrationTest, testing::ValuesIn(collectSvFiles()),
-    [](const testing::TestParamInfo<std::string>& info) {
-      return std::filesystem::path(info.param).stem().string();
-    });
+INSTANTIATE_TEST_SUITE_P(AllSvFiles, Scr1IntegrationTest,
+                         testing::ValuesIn(collectSvFiles()),
+                         [](const testing::TestParamInfo<std::string>& info) {
+                           auto p = std::filesystem::path(info.param);
+                           return p.stem().string() + "_" +
+                                  p.extension().string().substr(1);
+                         });

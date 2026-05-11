@@ -9,7 +9,6 @@
     gtest
     cmake
     ninja
-    git
     pkg-config
     microsoft-gsl
   ];

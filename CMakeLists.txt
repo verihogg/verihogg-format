@@ -46,20 +46,26 @@ find_package(GTest QUIET)
 if(GTest_FOUND)
   enable_testing()
 
-  include(FetchContent)
-  set(FETCHCONTENT_QUIET OFF)
+  option(VERIHOGG_ENABLE_REPO_TESTS "Enable tests that clone external repos (slow, requires internet)" OFF)
 
-  FetchContent_Declare(
-    scr1
-    GIT_REPOSITORY https://github.com/syntacore/scr1.git
-    GIT_TAG master
-    GIT_SHALLOW TRUE
-    GIT_SPARSE_CHECKOUT_PATHS "src"
-    GIT_PROGRESS TRUE
-    GIT_SUBMODULES ""
-    TIMEOUT 60
-  )
-  FetchContent_MakeAvailable(scr1)
+  if(VERIHOGG_ENABLE_REPO_TESTS)
+    include(FetchContent)
+    set(FETCHCONTENT_QUIET OFF)
+    FetchContent_Declare(
+      scr1
+      GIT_REPOSITORY https://github.com/syntacore/scr1.git
+      GIT_TAG master
+      GIT_SHALLOW TRUE
+      GIT_SPARSE_CHECKOUT_PATHS "src"
+      GIT_PROGRESS TRUE
+      GIT_SUBMODULES ""
+      TIMEOUT 60
+    )
+    FetchContent_MakeAvailable(scr1)
+    set(SCR1_DIR_VALUE "${scr1_SOURCE_DIR}")
+  else()
+    set(SCR1_DIR_VALUE "")
+  endif()
 
   file(GLOB_RECURSE LIB_SRC formatter/src/**.cpp)
   list(FILTER LIB_SRC EXCLUDE REGEX ".*/main\\.cpp$")
