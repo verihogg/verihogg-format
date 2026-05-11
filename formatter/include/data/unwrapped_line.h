@@ -22,9 +22,8 @@ template <typename Token>
 struct UnwrappedLine {
   std::vector<Token> tokens;
 
-  IndentLevel indentation_spaces;
-  PartitionPolicy partition_policy;
-  // todo
+  IndentLevel indentation_spaces = 0;
+  PartitionPolicy partition_policy = PartitionPolicy::kAlwaysExpand;
 
   auto map(std::invocable<Token&&> auto&& func) && -> UnwrappedLine<
       std::invoke_result_t<decltype(func), Token&&>> {
