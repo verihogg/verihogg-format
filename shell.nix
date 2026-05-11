@@ -9,4 +9,8 @@ pkgs.mkShell {
     shared.nativeBuildInputs
     ++ shared.buildInputs
     ++ shared.shellOnlyPackages;
+
+  shellHook = ''
+    export SCR1_ROOT=${shared.scr1}
+  '';
 }
