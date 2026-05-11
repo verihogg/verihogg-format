@@ -41,6 +41,9 @@ include(GNUInstallDirs)
 install(TARGETS ${PROJECT_NAME}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+# if(NOT DEFINED BUILD_TESTING)
+# set(BUILD_TESTING ON)
+# endif()
 find_package(GTest QUIET)
 
 if(GTest_FOUND)

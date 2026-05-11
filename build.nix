@@ -22,6 +22,6 @@ pkgs.stdenv.mkDerivation {
 
   preConfigure=''
     rm -rf build
-    SCR1_ROOT=${shared.scr1}
+    export SCR1_ROOT=${shared.scr1}
   '';
 }
