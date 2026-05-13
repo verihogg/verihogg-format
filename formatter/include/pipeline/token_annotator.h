@@ -19,66 +19,68 @@ class TokenAnnotator {
       -> std::vector<UnwrappedLine<FormatToken>>;
 
  private:
-  // Запускает три последовательных прохода для одной логической строки.
-  //   matchBrackets() - структура (кто с кем paired) ->
-  //   determineTokenTypes() - семантика (роль каждого токена) ->
-  //   computeInterTokenInfo() - метрики (пробелы, штрафы, решения)
+  // Runs three sequential passes for a single logical line.
+  //   matchBrackets() - structure (who is paired with whom) ->
+  //   determineTokenTypes() - semantics (role of each token) ->
+  //   computeInterTokenInfo() - metrics (spaces, penalties, decisions)
   auto annotateUnwrappedLine(UnwrappedLine<FormatToken>& line) const -> void;
 
-  // 1 проход: Структурный анализ
-  // Связывает парные токены: ( с ), [ с ], begin с end и т.д.
-  // Заполняет для каждого токена:
-  //   - matching_bracket  - указатель на парный токен (или nullptr)
-  //   - nesting_level     - глубина вложенности (0 - верхний уровень)
+  // Pass 1: Structural analysis
+  // Links paired tokens: ( with ), [ with ], begin with end, etc.
+  // Fills in for each token:
+  //   - matching_bracket  - pointer to the paired token (or nullptr)
+  //   - nesting_level     - nesting depth (0 = top level)
   //   - balancing         - kOpen / kClose / kNone
   //
-  // Реализуется линейным проходом со стеком открытых скобок.
-  // Необходим до determineTokenTypes, потому что классификация токенов
-  // зависит от глубины вложенности и наличия парного токена
+  // Implemented as a linear pass with a stack of open brackets.
+  // Required before determineTokenTypes, because token classification
+  // depends on nesting depth and the presence of a matching token.
   auto matchBrackets(gsl::span<FormatToken> tokens) const -> void;
 
-  // 2 проход: Семантический анализ
-  // Определяет TokenType каждого токена - его роль в контексте
-  // форматирования. Один TokenKind может получить разные TokenType
-  // в зависимости от окружения:
+  // Pass 2: Semantic analysis
+  // Determines the TokenType of each token - its role in the formatting
+  // context. The same TokenKind may receive different TokenType depending on
+  // the context:
   //   TokenKind::LessThan  ->  kBinaryOperator  (a < b)
   //                        ->  kOpenGroup       (#(params))
   //   TokenKind::Comma     ->  kPortListComma / kParameterListComma / ...
   //
-  // Использует результаты matchBrackets (nesting_level, matching_bracket)
-  // и внутренний стек AnnotationContext для отслеживания текущего региона
-  // (внутри списка портов, внутри выражения и тд)
+  // Uses results from matchBrackets (nesting_level, matching_bracket)
+  // and an internal AnnotationContext stack to track the current region
+  // (inside a port list, inside an expression, etc.).
   auto determineTokenTypes(gsl::span<FormatToken> tokens) const -> void;
 
-  // 3 проход: Вычисление метрик форматирования
-  // Заполняет FormatToken::before для каждого токена (кроме первого):
-  //   - spaces_required   - сколько пробелов вставить при продолжении строки
-  //   - break_penalty     - штраф за перенос (0 = бесплатно, больше =
-  //   нежелательнее)
+  // Pass 3: Computing formatting metrics
+  // Fills in FormatToken::before for each token (except the first):
+  //   - spaces_required   - how many spaces to insert when continuing on the
+  //   same line
+  //   - break_penalty     - line break penalty (0 = free, higher = less
+  //   desirable)
   //   - break_decision    - kMustBreak / kMustNotBreak / kUndecided
   //
-  // Решения принимаются делегированием трём методам ниже.
-  // Использует TokenType из determineTokenTypes.
+  // Decisions are made by delegating to the three methods below.
+  // Uses TokenType from determineTokenTypes.
   auto computeInterTokenInfo(gsl::span<FormatToken> tokens) const -> void;
 
-  // Возвращает количество пробелов, которые нужно вставить между left и right
-  // при размещении на одной строке. Зависит от TokenType обоих токенов:
-  //   kOpenGroup  -> right:    0 пробелов  (не пишем "( a")
-  //   kBinaryOperator:         1 пробел    (a + b)
-  //   kPortListComma -> right: 1 пробел  (a, b)
+  // Returns the number of spaces to insert between left and right
+  // when placing them on the same line. Depends on the TokenType of both
+  // tokens:
+  //   kOpenGroup  -> right:    0 spaces (we don't write "( a")
+  //   kBinaryOperator:         1 space  (a + b)
+  //   kPortListComma -> right: 1 space  (a, b)
   [[nodiscard]] auto spacesRequired(const FormatToken& left,
                                     const FormatToken& right) const -> size_t;
 
-  // Возвращает штраф за перенос строки перед right.
-  //   после запятой в порт-листе -> низкий штраф
-  //   внутри имени экземпляра ->  высокий штраф
+  // Returns the penalty for a line break before right.
+  //   after a comma in a port list -> low penalty
+  //   inside an instance name -> high penalty
   [[nodiscard]] auto breakPenalty(const FormatToken& left,
                                   const FormatToken& right) const -> size_t;
 
-  // Возвращает обязательное решение о переносе перед right, если оно есть.
-  //   kMustBreak - перенос обязателен (например, после begin)
-  //   kMustNotBreak - перенос запрещён (например, внутри #(...))
-  //   kUndecided - решение отдаётся алгоритму на основе breakPenalty
+  // Returns a mandatory break decision before right, if any.
+  //   kMustBreak - break is mandatory (e.g., after begin)
+  //   kMustNotBreak - break is prohibited (e.g., inside #(...))
+  //   kUndecided - decision is left to the algorithm based on breakPenalty
   [[nodiscard]] auto breakDecision(const FormatToken& left,
                                    const FormatToken& right) const
       -> BreakDecision;

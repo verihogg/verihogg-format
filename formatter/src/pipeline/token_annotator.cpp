@@ -16,14 +16,14 @@
 namespace format {
 
 // ---------------------------------------------------------------------------
-// Внутренние утилиты
+// Internal utilities
 // ---------------------------------------------------------------------------
 
 namespace {
 
 using TK = slang::parsing::TokenKind;
 
-// -- Штрафы за перенос строки -----------------------------------------------
+// -- Penalties for line breaks -----------------------------------------------
 struct Penalty {
   static constexpr size_t kNone = 0;
   static constexpr size_t kSoft = 10;
@@ -31,7 +31,7 @@ struct Penalty {
   static constexpr size_t kHard = 200;
 };
 
-// -- Классификация скобок ---------------------------------------------------
+// -- Classification of brackets ---------------------------------------------
 [[nodiscard]] auto groupBalancing(TK k) -> GroupBalancing {
   switch (k) {
     case TK::OpenParenthesis:
@@ -53,7 +53,7 @@ struct Penalty {
   }
 }
 
-// -- Унарный vs бинарный ----------------------------------------------------
+// -- Unary vs Binary ----------------------------------------------------
 [[nodiscard]] auto isOperand(TK k) -> bool {
   switch (k) {
     case TK::Identifier:
@@ -71,7 +71,7 @@ struct Penalty {
   }
 }
 
-// -- Контекст аннотации -----------------------------------------------------
+// -- Annotation context -----------------------------------------------------
 enum class Context : uint8_t {
   kTopLevel,
   kPortList,
@@ -82,7 +82,7 @@ enum class Context : uint8_t {
   kCaseBody,
 };
 
-// -- Пара соседних токенов --------------------------------------------------
+// -- Pair of adjacent tokens --------------------------------------------------
 struct TokenPair {
   const FormatToken* left;   // never null
   const FormatToken* right;  // never null
@@ -97,7 +97,7 @@ auto implComputeInterTokenInfo(gsl::span<FormatToken> tokens) -> void;
 }  // namespace
 
 // ---------------------------------------------------------------------------
-// Проход 1: matchBrackets
+// Pass 1: matchBrackets
 // ---------------------------------------------------------------------------
 
 auto TokenAnnotator::matchBrackets(gsl::span<FormatToken> tokens) const
@@ -136,7 +136,7 @@ auto TokenAnnotator::matchBrackets(gsl::span<FormatToken> tokens) const
 }
 
 // ---------------------------------------------------------------------------
-// Проход 2: determineTokenTypes
+// Pass 2: determineTokenTypes
 // ---------------------------------------------------------------------------
 
 auto TokenAnnotator::determineTokenTypes(gsl::span<FormatToken> tokens) const
@@ -160,7 +160,7 @@ auto TokenAnnotator::determineTokenTypes(gsl::span<FormatToken> tokens) const
     after_hash = false;
 
     switch (kind) {
-      // -- Структурные ключевые слова -------------------------------------
+      // -- Structural keywords -------------------------------------
       case TK::ModuleKeyword:
       case TK::MacromoduleKeyword:
         ft.type = TokenType::kModuleKeyword;
@@ -203,7 +203,7 @@ auto TokenAnnotator::determineTokenTypes(gsl::span<FormatToken> tokens) const
         ft.type = TokenType::kEndGenerateKeyword;
         continue;
 
-      // -- Управляющие ключевые слова -------------------------------------
+      // -- Control keywords -------------------------------------
       case TK::AlwaysKeyword:
       case TK::AlwaysCombKeyword:
       case TK::AlwaysFFKeyword:
@@ -268,7 +268,7 @@ auto TokenAnnotator::determineTokenTypes(gsl::span<FormatToken> tokens) const
                                                     : TokenType::kUnknown;
         continue;
 
-      // -- Разделители ----------------------------------------------------
+      // -- Separators ----------------------------------------------------
       case TK::Semicolon:
         ft.type = TokenType::kSemicolon;
         continue;
@@ -294,7 +294,7 @@ auto TokenAnnotator::determineTokenTypes(gsl::span<FormatToken> tokens) const
         ft.type = TokenType::kAtSign;
         continue;
 
-      // -- Направления портов ---------------------------------------------
+      // -- Port directions ---------------------------------------------
       case TK::InputKeyword:
       case TK::OutputKeyword:
       case TK::InOutKeyword:
@@ -302,7 +302,7 @@ auto TokenAnnotator::determineTokenTypes(gsl::span<FormatToken> tokens) const
         ft.type = TokenType::kPortDirection;
         continue;
 
-      // -- Типы данных ----------------------------------------------------
+      // -- Data types ----------------------------------------------------
       case TK::LogicKeyword:
       case TK::WireKeyword:
       case TK::RegKeyword:
@@ -328,7 +328,7 @@ auto TokenAnnotator::determineTokenTypes(gsl::span<FormatToken> tokens) const
         ft.type = TokenType::kTypeKeyword;
         continue;
 
-      // -- Операторы присваивания -----------------------------------------
+      // -- Assignment operators --------------------------------------------
       case TK::Equals:
       case TK::PlusEqual:
       case TK::MinusEqual:
@@ -345,7 +345,7 @@ auto TokenAnnotator::determineTokenTypes(gsl::span<FormatToken> tokens) const
         ft.type = TokenType::kAssignmentOperator;
         continue;
 
-      // -- Однозначно бинарные --------------------------------------------
+      // -- Unambiguously binary --------------------------------------------
       case TK::LessThan:
       case TK::GreaterThan:
       case TK::DoubleAnd:
@@ -368,7 +368,7 @@ auto TokenAnnotator::determineTokenTypes(gsl::span<FormatToken> tokens) const
         ft.type = TokenType::kBinaryOperator;
         continue;
 
-      // -- Потенциально унарные -------------------------------------------
+      // -- Potentially unary -------------------------------------------
       case TK::Plus:
       case TK::Minus:
       case TK::Star:
@@ -380,7 +380,7 @@ auto TokenAnnotator::determineTokenTypes(gsl::span<FormatToken> tokens) const
                                        : TokenType::kUnaryOperator;
         continue;
 
-      // -- Однозначно унарные ---------------------------------------------
+      // -- Unambiguously unary ---------------------------------------------
       case TK::Tilde:
       case TK::TildeAnd:
       case TK::TildeOr:
@@ -389,7 +389,7 @@ auto TokenAnnotator::determineTokenTypes(gsl::span<FormatToken> tokens) const
         ft.type = TokenType::kUnaryOperator;
         continue;
 
-      // -- Скобки --------------------------------------------------------
+      // -- Parentheses --------------------------------------------------------
       case TK::OpenParenthesis:
         ft.type = TokenType::kUnknown;
         if (was_after_hash) {
@@ -433,7 +433,7 @@ auto TokenAnnotator::determineTokenTypes(gsl::span<FormatToken> tokens) const
         }
         continue;
 
-      // -- Идентификаторы -------------------------------------------------
+      // -- Identifiers -------------------------------------------------
       case TK::Identifier:
       case TK::SystemIdentifier: {
         if (next_is_module_name) {
@@ -505,7 +505,7 @@ auto TokenAnnotator::determineTokenTypes(gsl::span<FormatToken> tokens) const
 }
 
 // ---------------------------------------------------------------------------
-// Проход 3: computeInterTokenInfo
+// Pass 3: computeInterTokenInfo
 // ---------------------------------------------------------------------------
 
 namespace {
@@ -663,17 +663,18 @@ auto implComputeInterTokenInfo(gsl::span<FormatToken> tokens) -> void {
   }
   for (size_t i = 1; i < tokens.size(); ++i) {
     const TokenPair p{.left = &tokens[i - 1], .right = &tokens[i]};
-    const size_t sp = implSpacesRequired(p);
-    if (sp > 0) {
-      const auto lk = p.left->token.kind;
-      const auto rk = p.right->token.kind;
-      if (rk == TK::IntegerBase || lk == TK::IntegerBase ||
-          rk == TK::ApostropheOpenBrace || lk == TK::ApostropheOpenBrace) {
-        fmt::print("SPACE BETWEEN: left={} right={} spaces={}\n",
-                   slang::parsing::toString(lk), slang::parsing::toString(rk),
-                   sp);
-      }
-    }
+    // For debugging
+    // const size_t sp = implSpacesRequired(p);
+    // if (sp > 0) {
+    //   const auto lk = p.left->token.kind;
+    //   const auto rk = p.right->token.kind;
+    //   if (rk == TK::IntegerBase || lk == TK::IntegerBase ||
+    //       rk == TK::ApostropheOpenBrace || lk == TK::ApostropheOpenBrace) {
+    //     fmt::print("SPACE BETWEEN: left={} right={} spaces={}\n",
+    //                slang::parsing::toString(lk),
+    //                slang::parsing::toString(rk), sp);
+    //   }
+    // }
 
     tokens[i].before = {
         .spaces_required = implSpacesRequired(p),
@@ -687,7 +688,7 @@ auto implComputeInterTokenInfo(gsl::span<FormatToken> tokens) -> void {
 }  // namespace
 
 // ---------------------------------------------------------------------------
-// annotateSpan — три прохода над contiguous-буфером
+// annotateSpan — three passes over a contiguous buffer
 // ---------------------------------------------------------------------------
 
 auto TokenAnnotator::annotateSpan(gsl::span<FormatToken> tokens) const -> void {
