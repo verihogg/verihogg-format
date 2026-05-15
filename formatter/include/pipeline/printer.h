@@ -1,6 +1,6 @@
 #pragma once
 
-#include <string>
+#include <ostream>
 #include <string_view>
 #include <vector>
 
@@ -14,8 +14,8 @@ class Printer {
  public:
   explicit Printer(const FormatStyle& style);
 
-  [[nodiscard]] auto print(const std::vector<UnwrappedLine<FormatToken>>& lines)
-      const -> std::string;
+  auto print(const std::vector<UnwrappedLine<FormatToken>>& lines,
+             std::ostream& os) const -> void;
 
  private:
   std::string_view line_ending_;

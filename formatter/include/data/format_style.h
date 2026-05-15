@@ -12,7 +12,7 @@ using ColumnNumber = size_t;
 using IndentLevel = size_t;
 
 enum class LineTerminator : uint8_t {
-  kAuto,  // определить по исходнику
+  kAuto,  // detect from source
   kLf,    // \n
   kCrLf,  // \r\n
 };

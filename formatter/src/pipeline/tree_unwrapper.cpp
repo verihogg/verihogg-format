@@ -3,6 +3,7 @@
 #include <slang/parsing/Token.h>
 #include <slang/parsing/TokenKind.h>
 
+#include <functional>
 #include <gsl/span>
 #include <string_view>
 #include <utility>
@@ -55,7 +56,7 @@ using Line = UnwrappedLine<Token>;
 class SVParser {
  public:
   SVParser(gsl::span<const Token> tokens, const FormatStyle& style)
-      : tokens_(tokens), style_(&style) {}
+      : tokens_(tokens), style_(style) {}
 
   auto parse() -> std::vector<Line> {
     parseLevel(TK::EndOfFile);
@@ -64,7 +65,7 @@ class SVParser {
 
  private:
   gsl::span<const Token> tokens_;
-  const FormatStyle* style_;
+  std::reference_wrapper<const FormatStyle> style_;
   size_t pos_ = 0;
   Line line_;
   std::vector<Line> lines_;
@@ -94,7 +95,7 @@ class SVParser {
     if (line_.tokens.empty()) {
       return;
     }
-    line_.indentation_spaces = indent_level_ * style_->indentation_spaces;
+    line_.indentation_spaces = indent_level_ * style_.get().indentation_spaces;
     line_.partition_policy = requiresTabularAlignment(line_)
                                  ? PartitionPolicy::kTabularAlignment
                                  : policy;

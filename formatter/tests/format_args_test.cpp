@@ -34,7 +34,7 @@ class FormatArgsTest : public ::testing::Test {
 };
 
 // ---------------------------------------------------------------------------
-// Дефолтные значения
+// Default values
 // ---------------------------------------------------------------------------
 
 TEST_F(FormatArgsTest, DefaultsAreApplied) {
@@ -94,20 +94,20 @@ TEST_F(FormatArgsTest, CustomOverColumnLimitPenalty) {
 }
 
 // ---------------------------------------------------------------------------
-// Флаг --inplace
+// --inplace flag
 // ---------------------------------------------------------------------------
 
 TEST_F(FormatArgsTest, InplaceFlagSetsRunConfig) {
   auto [style, run] = buildStyle({"--inplace"});
 
   EXPECT_TRUE(run.inplace);
-  // --inplace не должен влиять на стиль форматирования.
+  // --inplace must not affect formatting style.
   EXPECT_EQ(style.column_limit, format::defaults::kColumnLimit);
   EXPECT_EQ(style.indentation_spaces, format::defaults::kIndentationSpaces);
 }
 
 // ---------------------------------------------------------------------------
-// --line_terminator: все три допустимых значения
+// --line_terminator: all three valid values
 // ---------------------------------------------------------------------------
 
 TEST_F(FormatArgsTest, LineTerminatorAuto) {
@@ -126,7 +126,8 @@ TEST_F(FormatArgsTest, LineTerminatorCrlf) {
 }
 
 TEST_F(FormatArgsTest, InvalidLineTerminatorThrows) {
-  // parseCommandLine принимает строку как есть - исключение бросает buildStyle.
+  // parseCommandLine accepts the string as-is — buildStyle throws the
+  // exception.
   ASSERT_TRUE(parse({"--line_terminator", "windows"}));
   expectBuildStyleThrows<std::invalid_argument>();
 }
@@ -137,7 +138,7 @@ TEST_F(FormatArgsTest, EmptyLineTerminatorThrows) {
 }
 
 // ---------------------------------------------------------------------------
-// Несколько флагов одновременно - независимость друг от друга
+// Multiple flags at once — independence from each other
 // ---------------------------------------------------------------------------
 
 TEST_F(FormatArgsTest, MultipleNumericFlagsAreIndependent) {
@@ -167,19 +168,19 @@ TEST_F(FormatArgsTest, MultipleNumericFlagsAreIndependent) {
 }
 
 // ---------------------------------------------------------------------------
-// Граничные значения числовых флагов
+// Boundary values for numeric flags
 // ---------------------------------------------------------------------------
 
 TEST_F(FormatArgsTest, ColumnLimitOfOne) {
-  // Значение 1 технически допустимо на уровне CLI - бизнес-логика проверяет
-  // корректность отдельно, парсер не должен отвергать.
+  // Value 1 is technically valid at the CLI level — business logic validates
+  // correctness separately; the parser must not reject it.
   auto [style, run] = buildStyle({"--column_limit", "1"});
   EXPECT_EQ(style.column_limit, 1U);
 }
 
 TEST_F(FormatArgsTest, LargeColumnLimit) {
-  // slang парсит числовые аргументы как uint32_t, поэтому верхняя граница -
-  // numeric_limits<uint32_t>::max(), а не size_t.
+  // slang parses numeric arguments as uint32_t, so the upper bound is
+  // numeric_limits<uint32_t>::max(), not size_t.
   constexpr auto kMax = std::numeric_limits<uint32_t>::max();
   auto [style, run] =
       buildStyle({"--column_limit", std::to_string(kMax).c_str()});
@@ -191,14 +192,14 @@ TEST_F(FormatArgsTest, ZeroIndentationSpaces) {
 }
 
 TEST_F(FormatArgsTest, ColumnLimitOfZeroAcceptedByParser) {
-  // Ноль не имеет смысла семантически, но парсер не должен его отвергать -
-  // валидация значений - ответственность бизнес-логики.
+  // Zero is semantically meaningless, but the parser must not reject it —
+  // value validation is the responsibility of business logic.
   auto [style, run] = buildStyle({"--column_limit", "0"});
   EXPECT_EQ(style.column_limit, 0U);
 }
 
 // ---------------------------------------------------------------------------
-// Невалидный числовой флаг - parseCommandLine должен вернуть false.
+// Invalid numeric flag — parseCommandLine must return false.
 // ---------------------------------------------------------------------------
 
 TEST_F(FormatArgsTest, NonNumericColumnLimitRejectedByParser) {

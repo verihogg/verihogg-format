@@ -3,6 +3,7 @@
 #include <slang/parsing/Token.h>
 #include <slang/parsing/TokenKind.h>
 
+#include <ostream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -199,7 +200,7 @@ auto preserveBlankLines(size_t newline_count, PrintState& state) -> void {
   }
 }
 
-struct Indent {  // Переделать с норм названием
+struct Indent {
   size_t indent;
   size_t trailing_comment_spaces;
 };
@@ -304,15 +305,15 @@ auto printLine(const UnwrappedLine<FormatToken>& line, PrintState& state)
 Printer::Printer(const FormatStyle& style)
     : line_ending_(resolveLineEnding(style)) {}
 
-auto Printer::print(const std::vector<UnwrappedLine<FormatToken>>& lines) const
-    -> std::string {
+auto Printer::print(const std::vector<UnwrappedLine<FormatToken>>& lines,
+                    std::ostream& os) const -> void {
   PrintState state(line_ending_);
 
   for (const auto& line : lines) {
     printLine(line, state);
   }
 
-  return state.build();
+  os << state.build();
 }
 
 }  // namespace format

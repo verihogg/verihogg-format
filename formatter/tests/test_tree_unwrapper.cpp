@@ -28,7 +28,6 @@ constexpr size_t kIndent = 2;
 // and can be built by hand for expected values.
 // ---------------------------------------------------------------------------
 
-// NOLINTBEGIN(misc-non-private-member-variables-in-classes)
 struct TokSnap {
   TK kind;
   std::string text;
@@ -41,7 +40,6 @@ struct LineSnap {
   PP policy = PP::kAlwaysExpand;
   auto operator==(const LineSnap&) const -> bool = default;
 };
-// NOLINTEND(misc-non-private-member-variables-in-classes)
 
 // Converters from real lines to snapshots.
 
@@ -68,10 +66,12 @@ auto snap(const std::vector<Line>& lines) -> std::vector<LineSnap> {
 
 // Builders for constructing expected snapshots by hand.
 
+// N — build a token snapshot from its kind and raw text.
 auto N(TK kind, std::string_view text) -> TokSnap {
   return {.kind = kind, .text = std::string(text)};
 }
 
+// L — build a line snapshot from indent level, partition policy, and tokens.
 auto L(size_t indent, PP policy, std::vector<TokSnap> tokens) -> LineSnap {
   return {.tokens = std::move(tokens), .indent = indent, .policy = policy};
 }
@@ -90,15 +90,15 @@ auto policyName(PP policy) -> std::string_view {
   return "Unknown";
 }
 
-void PrintTo(const TokSnap& tok, std::ostream* os) {
-  *os << slang::parsing::toString(tok.kind) << "(" << tok.text << ")";
+auto operator<<(std::ostream& os, const TokSnap& tok) -> std::ostream& {
+  return os << slang::parsing::toString(tok.kind) << "(" << tok.text << ")";
 }
 
-void PrintTo(const LineSnap& line, std::ostream* os) {
-  *os << "{indent=" << line.indent << ", policy=" << policyName(line.policy)
-      << ", tokens=";
-  ::testing::internal::UniversalPrint(line.tokens, os);
-  *os << "}";
+auto operator<<(std::ostream& os, const LineSnap& line) -> std::ostream& {
+  os << "{indent=" << line.indent << ", policy=" << policyName(line.policy)
+     << ", tokens=";
+  ::testing::internal::UniversalPrint(line.tokens, &os);
+  return os << "}";
 }
 
 // ---------------------------------------------------------------------------

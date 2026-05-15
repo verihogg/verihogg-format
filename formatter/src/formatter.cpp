@@ -3,6 +3,7 @@
 #include <slang/parsing/Token.h>
 
 #include <gsl/span>
+#include <sstream>
 
 #include "data/format_style.h"
 #include "pipeline/printer.h"
@@ -17,6 +18,8 @@ auto format(gsl::span<const slang::parsing::Token> tokens, FormatStyle style)
   auto annotatedLines = TokenAnnotator(style).annotate(unwrappedLines);
   // joinLines(annotatedLines, style);
   align(annotatedLines, style);
-  return FormatResult{.formatted_text = Printer(style).print(annotatedLines)};
+  std::ostringstream oss;
+  Printer(style).print(annotatedLines, oss);
+  return FormatResult{.formatted_text = oss.str()};
 }
 }  // namespace format

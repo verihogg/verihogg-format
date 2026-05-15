@@ -3,12 +3,14 @@
 #include <slang/text/SourceManager.h>
 #include <slang/util/BumpAllocator.h>
 
+#include <filesystem>
 #include <string_view>
 #include <vector>
 
 class LexContext {
  public:
-  auto lex_file(std::string_view path) -> std::vector<slang::parsing::Token>;
+  auto lex_file(const std::filesystem::path& path)
+      -> std::vector<slang::parsing::Token>;
   auto lex_string(std::string_view src) -> std::vector<slang::parsing::Token>;
 
   auto source_manager() -> slang::SourceManager& { return source_manager_; }

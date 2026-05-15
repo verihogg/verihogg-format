@@ -28,7 +28,7 @@ auto runFormatter(gsl::span<const std::filesystem::path> files,
   int warnings = 0;
   for (const auto& path : files) {
     LexContext ctx;
-    auto tokens = ctx.lex_file(path.string());
+    auto tokens = ctx.lex_file(path);
     if (tokens.empty()) {
       *streams.err << "Warning: no tokens in " << path << "\n";
       ++warnings;
