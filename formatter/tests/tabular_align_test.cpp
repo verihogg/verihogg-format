@@ -31,23 +31,20 @@ class TabularAlignerTest : public ::testing::Test {
 // ---------------------------------------------------------------------------
 
 TEST_F(TabularAlignerTest, TwoPortsSameStructureAlignColumns) {
-  // input logic clk: col0="input", col1="logic", col2="clk"
-  // input logic rst: col0="input", col1="logic", col2="rst"
-  // After alignment col1 and col2 must start at the same offset on both lines.
   const std::string result =
       formatText("module m (input logic clk, input logic rst); endmodule");
-  auto pos_first = result.find("logic clk");
-  auto pos_second = result.find("logic rst");
-  ASSERT_NE(pos_first, std::string::npos);
-  ASSERT_NE(pos_second, std::string::npos);
-
   auto col_of = [&](std::string::size_type pos) -> size_t {
     auto nl = result.rfind('\n', pos);
     return pos - (nl == std::string::npos ? 0 : nl + 1);
   };
+  auto p_clk = result.find("clk");
+  auto p_rst = result.find("rst");
 
-  EXPECT_EQ(col_of(pos_first), col_of(pos_second))
-      << "\"logic\" keyword must start at the same column on both port lines\n"
+  ASSERT_NE(p_clk, std::string::npos);
+  ASSERT_NE(p_rst, std::string::npos);
+
+  EXPECT_EQ(col_of(p_clk), col_of(p_rst))
+      << "Port names 'clk' and 'rst' must start at the same column\n"
       << result;
 }
 
@@ -65,18 +62,18 @@ TEST_F(TabularAlignerTest, ThreePortsNameColumnAligned) {
     return pos - (nl == std::string::npos ? 0 : nl + 1);
   };
 
-  auto p_clk = result.find("clk");
-  auto p_rst = result.find("rst_n");
-  auto p_count = result.find("count");
+  auto p_clk = result.find(" clk,");
+  auto p_rst = result.find(" rst_n,");
+  auto p_count = result.find(" count\n");
 
   ASSERT_NE(p_clk, std::string::npos);
   ASSERT_NE(p_rst, std::string::npos);
   ASSERT_NE(p_count, std::string::npos);
 
-  EXPECT_EQ(col_of(p_clk), col_of(p_rst))
+  EXPECT_EQ(col_of(p_clk + 1), col_of(p_rst + 1))
       << "clk and rst_n must be in the same column\n"
       << result;
-  EXPECT_EQ(col_of(p_clk), col_of(p_count))
+  EXPECT_EQ(col_of(p_clk + 1), col_of(p_count + 1))
       << "clk and count must be in the same column\n"
       << result;
 }
