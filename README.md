@@ -256,6 +256,7 @@ The binary is placed at `build/bin/verihogg-format`.
 │       ├── format_args_test.cpp
 │       ├── printer_test.cpp
 │       ├── scr1_tests.cpp
+│       ├── tabular_align_test.cpp
 │       └── test_tree_unwrapper.cpp
 ├── scripts/
 │   ├── check-format.sh
@@ -276,7 +277,7 @@ The binary is placed at `build/bin/verihogg-format`.
 
 Tests use source files from the [SCR1](https://github.com/syntacore/scr1) RISC-V core project by Syntacore. The test suite includes:
 
-- **Unit tests** — `format_args_test.cpp` (CLI argument parsing), `printer_test.cpp` (formatting output), `test_tree_unwrapper.cpp` (tree unwrapper)
+- **Unit tests** — `format_args_test.cpp` (CLI argument parsing), `printer_test.cpp` (formatting output), `tabular_align_test.cpp` (tabular alignment), `test_tree_unwrapper.cpp` (tree unwrapper)
 - **Integration tests** — `scr1_tests.cpp` (formats all SCR1 `.sv`/`.svh` files and verifies the syntax tree is preserved)
 
 The `SCR1_ROOT` environment variable (or CMake variable) must point to a local SCR1 checkout for the integration tests to run; they are skipped automatically if the path is absent.
