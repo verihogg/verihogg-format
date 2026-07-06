@@ -143,9 +143,11 @@ auto LineJoiner::join(std::vector<UnwrappedLine<FormatToken>>& lines) const
             break;
           }
 
-          if (isSimpleStatement(lines.at(i + 1)) && isJoinable(lines.at(i + 1))) {
-            const size_t w = lineWidth(anchor) + 1 + internalWidth(lines.at(i)) +
-                             1 + internalWidth(lines.at(i + 1));
+          if (isSimpleStatement(lines.at(i + 1)) &&
+              isJoinable(lines.at(i + 1))) {
+            const size_t w = lineWidth(anchor) + 1 +
+                             internalWidth(lines.at(i)) + 1 +
+                             internalWidth(lines.at(i + 1));
             if (w > st.column_limit) {
               break;
             }
