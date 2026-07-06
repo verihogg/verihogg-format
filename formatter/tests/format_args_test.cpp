@@ -20,11 +20,19 @@ class FormatArgsTest : public ::testing::Test {
   [[nodiscard]] auto buildStyle(std::vector<const char*> args = {})
       -> std::pair<format::FormatStyle, format::RunConfig> {
     EXPECT_TRUE(parse(std::move(args)));
+    if (!binder.has_value()) {
+      ADD_FAILURE() << "binder not initialized";
+      return {};
+    }
     return binder->buildStyle();
   }
 
   template <typename Exception>
   auto expectBuildStyleThrows() -> void {
+    if (!binder.has_value()) {
+      ADD_FAILURE() << "binder not initialized";
+      return;
+    }
     EXPECT_THROW(std::ignore = binder->buildStyle(), Exception);
   }
 
