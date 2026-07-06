@@ -638,9 +638,11 @@ auto implBreakDecision(TokenPair p) -> BreakDecision {
   if (implSpacesRequired(p) == 0 && right.balancing != GroupBalancing::kClose) {
     return BreakDecision::kMustNotBreak;
   }
-  if (right.type == TokenType::kDirective ||
-      left.type == TokenType::kDirective) {
+  if (right.type == TokenType::kDirective) {
     return BreakDecision::kMustBreak;
+  }
+  if (left.type == TokenType::kDirective) {
+    return BreakDecision::kMustNotBreak;
   }
   if (left.type == TokenType::kBeginKeyword) {
     return BreakDecision::kMustBreak;
