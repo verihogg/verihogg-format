@@ -74,7 +74,10 @@ using TriviaKind = slang::parsing::TriviaKind;
 
 [[nodiscard]] auto endsWithOpenBlock(const UnwrappedLine<FormatToken>& line)
     -> bool {
-  if (line.tokens.empty()) return false;
+  if (line.tokens.empty()) {
+    return false;
+  }
+
   const TK last = line.tokens.back().token.kind;
   return last == TK::BeginKeyword || last == TK::ForkKeyword;
 }
