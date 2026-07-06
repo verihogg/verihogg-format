@@ -19,6 +19,7 @@ class Printer {
 
  private:
   std::string_view line_ending_;
+  IndentLevel wrap_spaces_;
 };
 
 }  // namespace format

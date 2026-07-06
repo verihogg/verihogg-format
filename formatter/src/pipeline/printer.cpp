@@ -267,13 +267,15 @@ struct Indent {
   return effect;
 }
 
-auto printLine(const UnwrappedLine<FormatToken>& line, PrintState& state)
-    -> void {
+auto printLine(const UnwrappedLine<FormatToken>& line, PrintState& state,
+               IndentLevel wrap_spaces) -> void {
   if (line.tokens.empty()) {
     return;
   }
 
   const size_t indent = line.indentation_spaces;
+  const size_t continuation_indent = indent + wrap_spaces;
+
   for (size_t i = 0; i < line.tokens.size(); ++i) {
     const FormatToken& ft = line.tokens.at(i);
     const size_t spaces_before = (i == 0) ? 0 : ft.before.spaces_required;
@@ -286,6 +288,9 @@ auto printLine(const UnwrappedLine<FormatToken>& line, PrintState& state)
     if (i == 0 || state.currentLineEmpty()) {
       state.finishLineIfNeeded();
       state.ensureIndent(indent);
+    } else if (ft.decision.action == TokenAction::kWrap) {
+      state.finishLineIfNeeded();
+      state.ensureIndent(continuation_indent);
     } else {
       state.appendSpaces(spaces_before);
     }
@@ -303,14 +308,15 @@ auto printLine(const UnwrappedLine<FormatToken>& line, PrintState& state)
 }  // namespace
 
 Printer::Printer(const FormatStyle& style)
-    : line_ending_(resolveLineEnding(style)) {}
+    : line_ending_(resolveLineEnding(style)),
+      wrap_spaces_(style.wrap_spaces) {}
 
 auto Printer::print(const std::vector<UnwrappedLine<FormatToken>>& lines,
                     std::ostream& os) const -> void {
   PrintState state(line_ending_);
 
   for (const auto& line : lines) {
-    printLine(line, state);
+    printLine(line, state, wrap_spaces_);
   }
 
   os << state.build();

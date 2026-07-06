@@ -7,8 +7,13 @@
 #include "data/unwrapped_line.h"
 
 namespace format {
+
 [[nodiscard]] auto searchLineWraps(const UnwrappedLine<FormatToken>& line,
                                    const FormatStyle& style,
                                    ColumnNumber initial_column = 0)
     -> std::vector<InterTokenDecision>;
+
+void optimizeLineWraps(std::vector<UnwrappedLine<FormatToken>>& lines,
+                       const FormatStyle& style);
+
 }  // namespace format
