@@ -531,25 +531,18 @@ class SVParser {
   }
 
   auto parseCaseItem() -> void {
-    if (at(TK::DefaultKeyword)) {
+    while (!at(TK::Colon) && !at(TK::Directive) && !at(TK::EndOfFile) &&
+           !at(TK::EndCaseKeyword)) {
       consumeInto(line_);
-      if (at(TK::Colon)) {
-        consumeInto(line_);
-      }
-    } else {
-      while (!at(TK::Colon) && !at(TK::Directive) && !at(TK::EndOfFile) &&
-             !at(TK::EndCaseKeyword)) {
-        consumeInto(line_);
-      }
-      if (at(TK::Colon)) {
-        consumeInto(line_);
-      }
     }
-    addLine(PartitionPolicy::kTabularAlignment);
-
-    ++indent_level_;
-    parseStatement();
-    --indent_level_;
+    if (at(TK::Colon)) {
+      consumeInto(line_);
+    }
+    if (!at(TK::EndCaseKeyword) && !at(TK::EndOfFile)) {
+      parseStatement();
+    } else {
+      addLine();
+    }
   }
 
   // for / foreach / while / repeat / forever
