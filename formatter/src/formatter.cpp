@@ -6,6 +6,7 @@
 #include <sstream>
 
 #include "data/format_style.h"
+#include "pipeline/line_joiner.h"
 #include "pipeline/printer.h"
 #include "pipeline/tabular_aligner.h"
 #include "pipeline/token_annotator.h"
@@ -20,7 +21,7 @@ auto format(gsl::span<const slang::parsing::Token> tokens, FormatStyle style)
   auto unwrapResult =
       TreeUnwrapper(normalizedTokens, style).unwrapWithDiagnostics();
   auto annotatedLines = TokenAnnotator(style).annotate(unwrapResult.lines);
-  // joinLines(annotatedLines, style);
+  LineJoiner(style).join(annotatedLines);
   align(annotatedLines, style);
   std::ostringstream oss;
   Printer(style).print(annotatedLines, oss);

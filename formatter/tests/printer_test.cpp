@@ -60,10 +60,7 @@ TEST_F(PrinterTest, NormalizesNumericLiteralTextBeforeFormatting) {
   EXPECT_EQ(formatText("module m (); assign y = 8'HFF; assign z = 'X; "
                        "assign r = 1E-3; endmodule"),
             "module m (\n"
-            ");\n"
-            "  assign y = 8'hff;\n"
-            "  assign z = 'x;\n"
-            "  assign r = 1e-3;\n"
+            "); assign y = 8'hff; assign z = 'x; assign r = 1e-3;\n"
             "endmodule\n");
 }
 
@@ -74,7 +71,6 @@ TEST_F(PrinterTest, DoesNotInsertBeginEndDuringNormalization) {
             "module m (\n"
             ");\n"
             "  always_ff @(posedge clk)\n"
-            "    if (en)\n"
-            "      q <= d;\n"
+            "    if (en) q <= d;\n"
             "endmodule\n");
 }
