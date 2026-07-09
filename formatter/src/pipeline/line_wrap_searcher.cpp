@@ -37,13 +37,13 @@ struct Shape {
 
 struct SearchNode {
   size_t parent = kNoParent;
-  size_t token_index = 0;
   size_t next_token = 0;
-  InterTokenDecision decision{};
-  TokenAction last_action = TokenAction::kAppend;
   ColumnNumber current_column = 0;
   size_t cumulative_cost = 0;
   std::vector<ColumnNumber> wrap_columns;
+  ColumnNumber spaces_before = 0;
+  TokenAction action = TokenAction::kAppend;
+  bool is_active = true;
 };
 
 struct StateKey {
@@ -89,7 +89,7 @@ struct QueueCompare {
 
 [[nodiscard]] auto keyFor(const SearchNode& node) -> StateKey {
   return StateKey{.next_token = node.next_token,
-                  .last_action = node.last_action,
+                  .last_action = node.action,
                   .current_column = node.current_column,
                   .wrap_columns = node.wrap_columns};
 }
@@ -133,11 +133,7 @@ auto openGroupBalance(std::vector<ColumnNumber>& wrap_columns,
                             const Shape& shape) -> SearchNode {
   SearchNode root{
       .parent = kNoParent,
-      .token_index = 0,
       .next_token = std::min<size_t>(line.tokens.size(), 1),
-      .decision = InterTokenDecision{.spaces_before = 0,
-                                     .action = TokenAction::kAppend},
-      .last_action = TokenAction::kAppend,
       .current_column = shape.base_indent,
       .cumulative_cost = 0,
       .wrap_columns = {shape.base_indent + shape.wrap_spaces},
@@ -159,13 +155,11 @@ auto openGroupBalance(std::vector<ColumnNumber>& wrap_columns,
 
   SearchNode child{
       .parent = parent_index,
-      .token_index = token_index,
       .next_token = token_index + 1,
-      .decision = InterTokenDecision{.spaces_before = 0, .action = action},
-      .last_action = action,
       .current_column = parent.current_column,
       .cumulative_cost = parent.cumulative_cost,
       .wrap_columns = parent.wrap_columns,
+      .action = action,
   };
 
   bool opened_group = false;
@@ -176,7 +170,7 @@ auto openGroupBalance(std::vector<ColumnNumber>& wrap_columns,
       closeGroupBalance(child.wrap_columns);
       closed_group = true;
     }
-    if (parent.last_action == TokenAction::kWrap) {
+    if (parent.action == TokenAction::kWrap) {
       openGroupBalance(child.wrap_columns, parent, previous_token, action,
                        shape);
       opened_group = true;
@@ -184,26 +178,23 @@ auto openGroupBalance(std::vector<ColumnNumber>& wrap_columns,
   }
 
   const ColumnNumber width = tokenWidth(current_token);
-  ColumnNumber column_for_penalty = child.current_column;
 
   switch (action) {
     case TokenAction::kWrap: {
       const ColumnNumber token_start = child.wrap_columns.back();
-      child.decision.spaces_before = token_start;
+      child.spaces_before = token_start;
       child.current_column = token_start + width;
-      column_for_penalty = child.current_column;
       child.cumulative_cost += style.line_break_penalty;
       child.cumulative_cost += current_token.before.break_penalty;
       break;
     }
     case TokenAction::kAppend:
     case TokenAction::kPreserve:
-      child.decision.spaces_before = current_token.before.spaces_required;
+      child.spaces_before = current_token.before.spaces_required;
       child.current_column =
           parent.current_column + current_token.before.spaces_required + width;
-      column_for_penalty = child.current_column;
       child.cumulative_cost = addOverflowPenalty(
-          child.cumulative_cost, column_for_penalty, shape, style);
+          child.cumulative_cost, child.current_column, shape, style);
       break;
   }
 
@@ -221,20 +212,22 @@ auto openGroupBalance(std::vector<ColumnNumber>& wrap_columns,
 auto enqueueNode(std::vector<SearchNode>& nodes,
                  std::priority_queue<QueueEntry, std::vector<QueueEntry>,
                                      QueueCompare>& worklist,
-                 std::map<StateKey, size_t>& best_costs, SearchNode node,
+                 std::map<StateKey, size_t>& best_nodes, SearchNode node,
                  size_t& next_sequence) -> void {
   StateKey key = keyFor(node);
+  const size_t node_index = nodes.size();
   const auto [best, inserted] =
-      best_costs.try_emplace(std::move(key), node.cumulative_cost);
+      best_nodes.try_emplace(std::move(key), node_index);
 
   if (!inserted) {
-    if (best->second <= node.cumulative_cost) {
+    SearchNode& best_node = nodes.at(best->second);
+    if (best_node.cumulative_cost <= node.cumulative_cost) {
       return;
     }
-    best->second = node.cumulative_cost;
+    best_node.is_active = false;
+    best->second = node_index;
   }
 
-  const size_t node_index = nodes.size();
   const size_t cumulative_cost = node.cumulative_cost;
   const ColumnNumber current_column = node.current_column;
   nodes.push_back(std::move(node));
@@ -259,8 +252,11 @@ auto enqueueNode(std::vector<SearchNode>& nodes,
   size_t index = goal_index.value;
   while (index != kNoParent) {
     const SearchNode& node = nodes.at(index);
-    if (node.token_index < token_count.value) {
-      decisions.at(node.token_index) = node.decision;
+    if (node.next_token > 0 && node.next_token <= token_count.value) {
+      decisions.at(node.next_token - 1) = InterTokenDecision{
+          .spaces_before = node.spaces_before,
+          .action = node.action,
+      };
     }
     index = node.parent;
   }
@@ -306,43 +302,42 @@ auto enqueueNode(std::vector<SearchNode>& nodes,
 
   std::priority_queue<QueueEntry, std::vector<QueueEntry>, QueueCompare>
       worklist;
-  std::map<StateKey, size_t> best_costs;
+  std::map<StateKey, size_t> best_nodes;
   size_t next_sequence = 0;
 
-  enqueueNode(nodes, worklist, best_costs, makeRoot(line, shape),
+  enqueueNode(nodes, worklist, best_nodes, makeRoot(line, shape),
               next_sequence);
 
   while (!worklist.empty()) {
     const QueueEntry entry = worklist.top();
     worklist.pop();
 
-    const SearchNode& current = nodes.at(entry.node_index);
-    const auto best = best_costs.find(keyFor(current));
-    if (best != best_costs.end() && best->second != current.cumulative_cost) {
+    if (!nodes.at(entry.node_index).is_active) {
       continue;
     }
 
-    if (current.next_token == line.tokens.size()) {
+    const size_t next_token = nodes.at(entry.node_index).next_token;
+    if (next_token == line.tokens.size()) {
       return reconstructDecisions(nodes,
                                   GoalNodeIndex{.value = entry.node_index},
                                   TokenCount{.value = line.tokens.size()});
     }
 
     const BreakDecision break_decision =
-        line.tokens.at(current.next_token).before.break_decision;
+        line.tokens.at(next_token).before.break_decision;
 
     if (break_decision != BreakDecision::kMustBreak) {
-      enqueueNode(nodes, worklist, best_costs,
-                  makeChild(line, shape, style, current, entry.node_index,
-                            TokenAction::kAppend),
-                  next_sequence);
+      SearchNode child =
+          makeChild(line, shape, style, nodes.at(entry.node_index),
+                    entry.node_index, TokenAction::kAppend);
+      enqueueNode(nodes, worklist, best_nodes, std::move(child), next_sequence);
     }
 
     if (break_decision != BreakDecision::kMustNotBreak) {
-      enqueueNode(nodes, worklist, best_costs,
-                  makeChild(line, shape, style, current, entry.node_index,
-                            TokenAction::kWrap),
-                  next_sequence);
+      SearchNode child =
+          makeChild(line, shape, style, nodes.at(entry.node_index),
+                    entry.node_index, TokenAction::kWrap);
+      enqueueNode(nodes, worklist, best_nodes, std::move(child), next_sequence);
     }
   }
 
