@@ -276,7 +276,10 @@ auto printLine(const UnwrappedLine<FormatToken>& line, PrintState& state)
   const size_t indent = line.indentation_spaces;
   for (size_t i = 0; i < line.tokens.size(); ++i) {
     const FormatToken& ft = line.tokens.at(i);
-    const size_t spaces_before = (i == 0) ? 0 : ft.before.spaces_required;
+    const InterTokenDecision decision =
+        (i == 0) ? InterTokenDecision{.spaces_before = 0,
+                                      .action = TokenAction::kAppend}
+                 : ft.decision;
 
     const size_t tcs = (i == 0) ? ft.before.comment_spaces : 0;
 
@@ -285,9 +288,14 @@ auto printLine(const UnwrappedLine<FormatToken>& line, PrintState& state)
 
     if (i == 0 || state.currentLineEmpty()) {
       state.finishLineIfNeeded();
-      state.ensureIndent(indent);
+      state.ensureIndent(decision.action == TokenAction::kWrap
+                             ? decision.spaces_before
+                             : indent);
+    } else if (decision.action == TokenAction::kWrap) {
+      state.finishLine();
+      state.ensureIndent(decision.spaces_before);
     } else {
-      state.appendSpaces(spaces_before);
+      state.appendSpaces(decision.spaces_before);
     }
 
     for (const std::string_view comment : trivia.inline_comments) {

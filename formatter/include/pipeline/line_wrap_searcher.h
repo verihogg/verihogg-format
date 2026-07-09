@@ -11,4 +11,7 @@ namespace format {
                                    const FormatStyle& style,
                                    ColumnNumber initial_column = 0)
     -> std::vector<InterTokenDecision>;
+
+auto applyLineWraps(std::vector<UnwrappedLine<FormatToken>>& lines,
+                    const FormatStyle& style) -> void;
 }  // namespace format
