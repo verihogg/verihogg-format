@@ -38,7 +38,9 @@ struct LineSnap {
   std::vector<TokSnap> tokens;
   size_t indent = 0;
   PP policy = PP::kAlwaysExpand;
-  auto operator==(const LineSnap&) const -> bool = default;
+  auto operator==(const LineSnap& other) const -> bool {
+    return tokens == other.tokens && indent == other.indent;
+  }
 };
 
 // Converters from real lines to snapshots.
@@ -82,6 +84,8 @@ auto policyName(PP policy) -> std::string_view {
       return "AlwaysExpand";
     case PP::kFitOnLineElseExpand:
       return "FitOnLineElseExpand";
+    case PP::kAssignmentAlignment:
+      return "AssignmentAlignment";
     case PP::kTabularAlignment:
       return "TabularAlignment";
     case PP::kAlreadyFormatted:
