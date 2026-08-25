@@ -5,7 +5,7 @@ let
   };
 in
 pkgs.mkShell {
-  packages =
+  buildInputs =
     shared.nativeBuildInputs
     ++ shared.buildInputs
     ++ shared.shellOnlyPackages;
