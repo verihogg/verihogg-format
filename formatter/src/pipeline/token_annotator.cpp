@@ -577,8 +577,12 @@ auto implSpacesRequired(TokenPair p) -> size_t {
   if (right.type == TokenType::kComma || right.type == TokenType::kSemicolon) {
     return 0;
   }
-  if (left.balancing == GroupBalancing::kOpen ||
-      right.balancing == GroupBalancing::kClose) {
+  // Group balancing also includes begin/end and fork/join. Only punctuation
+  // brackets suppress spaces; applying this rule to keywords can merge tokens
+  // and prevent the required line break after a block opener in fallback lines.
+  if (lk == TK::OpenParenthesis || lk == TK::OpenBracket ||
+      lk == TK::OpenBrace || rk == TK::CloseParenthesis ||
+      rk == TK::CloseBracket || rk == TK::CloseBrace) {
     return 0;
   }
   if (left.type == TokenType::kUnaryOperator) {
