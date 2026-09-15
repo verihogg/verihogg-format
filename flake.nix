@@ -1,6 +1,7 @@
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
+    nixpkgs-patcher.url = "github:gepbird/nixpkgs-patcher";
     flake-parts.url = "github:hercules-ci/flake-parts";
     systems.url = "github:nix-systems/default";
     flake-compat = {
@@ -11,21 +12,31 @@
       url = "github:syntacore/scr1";
       flake = false;
     };
+    nixpkgs-patch-clang-tools-bash = {
+      url = "https://github.com/NixOS/nixpkgs/pull/563394.diff";
+      flake = false;
+    };
   };
 
   outputs =
     inputs@{
       self,
       nixpkgs,
+      nixpkgs-patcher,
       flake-parts,
       systems,
       scr1,
       ...
     }:
-    flake-parts.lib.mkFlake { inherit inputs; } {
+    flake-parts.lib.mkFlake { inputs = inputs // { }; } {
       systems = import systems;
       perSystem =
-        { self', pkgs, ... }:
+        {
+          self',
+          pkgs,
+          system,
+          ...
+        }:
         let
           inherit (pkgs) lib;
         in
@@ -63,16 +74,21 @@
             '';
           };
 
-          devShells.default = pkgs.mkShell {
-            buildInputs =
-              self'.packages.default.buildInputs
-              ++ self'.packages.default.nativeBuildInputs
-              ++ [ pkgs.llvmPackages_22.clang-tools ];
+          devShells.default =
+            let
+              nixpkgs-patched = nixpkgs-patcher.lib.patchNixpkgs { inherit inputs system; };
+              pkgs = import nixpkgs-patched { inherit system; };
+            in
+            pkgs.mkShell {
+              buildInputs =
+                self'.packages.default.buildInputs
+                ++ self'.packages.default.nativeBuildInputs
+                ++ [ pkgs.llvmPackages_22.clang-tools ];
 
-            shellHook = ''
-              export SCR1_ROOT=${scr1}
-            '';
-          };
+              shellHook = ''
+                export SCR1_ROOT=${scr1}
+              '';
+            };
         };
     };
 }

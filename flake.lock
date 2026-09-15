@@ -65,11 +65,40 @@
         "type": "github"
       }
     },
+    "nixpkgs-patch-clang-tools-bash": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-8fdSEwmybshH2uCV+PVqLWFk0lXAvyAIHd8Iz8InIic=",
+        "type": "file",
+        "url": "https://github.com/NixOS/nixpkgs/pull/563394.diff"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://github.com/NixOS/nixpkgs/pull/563394.diff"
+      }
+    },
+    "nixpkgs-patcher": {
+      "locked": {
+        "lastModified": 1789143781,
+        "narHash": "sha256-WFr3wYdhSEJd/nQyJuETd6dcS08Exc+qoZWJ2tHM/gg=",
+        "owner": "gepbird",
+        "repo": "nixpkgs-patcher",
+        "rev": "da7c09e478f552c3a9ebb78b2f68426c1855fd81",
+        "type": "github"
+      },
+      "original": {
+        "owner": "gepbird",
+        "repo": "nixpkgs-patcher",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "flake-compat": "flake-compat",
         "flake-parts": "flake-parts",
         "nixpkgs": "nixpkgs",
+        "nixpkgs-patch-clang-tools-bash": "nixpkgs-patch-clang-tools-bash",
+        "nixpkgs-patcher": "nixpkgs-patcher",
         "scr1": "scr1",
         "systems": "systems"
       }
