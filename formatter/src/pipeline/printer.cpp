@@ -3,6 +3,7 @@
 #include <slang/parsing/Token.h>
 #include <slang/parsing/TokenKind.h>
 
+#include <algorithm>
 #include <ostream>
 #include <string>
 #include <string_view>
@@ -19,7 +20,7 @@ using slang::parsing::TriviaKind;
 
 struct CompletedLine {
   std::string text;
-  bool has_code = false;
+  bool accepts_trailing_comment = false;
 };
 
 class PrintState {
@@ -44,12 +45,34 @@ class PrintState {
 
   auto appendComment(std::string_view text) -> void { current_.append(text); }
 
-  auto finishLine() -> void {
+  auto finishLine(bool preserve_source_break = false) -> void {
     trimCurrentLine();
-    lines_.push_back(CompletedLine{.text = std::move(current_),
-                                   .has_code = current_has_code_});
+    // A layout break can precede a trailing comment on the same source line.
+    // After a newline preserved inside a multiline comment, subsequent trivia
+    // belongs to the next physical line instead.
+    lines_.push_back(CompletedLine{
+        .text = std::move(current_),
+        .accepts_trailing_comment = current_has_code_ && !preserve_source_break,
+    });
     current_.clear();
     current_has_code_ = false;
+  }
+
+  auto appendPreservedText(std::string_view text) -> void {
+    while (!text.empty()) {
+      const auto end = text.find_first_of("\r\n");
+      appendToken(text.substr(0, end));
+      if (end == std::string_view::npos) {
+        return;
+      }
+      const size_t newline_size = text.at(end) == '\r' &&
+                                          end + 1 < text.size() &&
+                                          text.at(end + 1) == '\n'
+                                      ? 2
+                                      : 1;
+      finishLine(true);
+      text.remove_prefix(end + newline_size);
+    }
   }
 
   auto finishLineIfNeeded() -> void {
@@ -60,7 +83,7 @@ class PrintState {
 
   auto addBlankLine() -> void {
     finishLineIfNeeded();
-    if (!lines_.empty() && lines_.back().text.empty()) {
+    if (lines_.empty() || lines_.back().text.empty()) {
       return;
     }
     lines_.push_back(CompletedLine{});
@@ -75,7 +98,7 @@ class PrintState {
       return;
     }
 
-    if (!lines_.empty() && lines_.back().has_code) {
+    if (!lines_.empty() && lines_.back().accepts_trailing_comment) {
       appendSpacesBeforeComment(lines_.back().text, spaces_before);
       lines_.back().text.append(text);
       return;
@@ -96,6 +119,23 @@ class PrintState {
     last.append(text);
   }
 
+  // Trivia on the first token of the next partition may still belong to the
+  // preceding physical line. Preserve that attachment, including at EOF.
+  auto attachTrailingBlockComment(const Trivia& comment,
+                                  std::string_view spaces_before) -> bool {
+    if (!current_.empty() || lines_.empty() ||
+        !lines_.back().accepts_trailing_comment) {
+      return false;
+    }
+    current_ = std::move(lines_.back().text);
+    current_has_code_ = true;
+    lines_.pop_back();
+    appendRaw(spaces_before);
+    appendPreservedText(comment.getRawText());
+    finishLineIfNeeded();
+    return true;
+  }
+
   auto emitDetachedComment(std::string_view text, size_t indent) -> void {
     finishLineIfNeeded();
     size_t start = 0;
@@ -109,7 +149,12 @@ class PrintState {
         --part_end;
       }
 
-      ensureIndent(indent);
+      // The first line gets the surrounding code's indentation. Continuation
+      // lines already belong to the comment text; adding indentation to them
+      // again on each formatting pass would make multiline comments drift.
+      if (start == 0) {
+        ensureIndent(indent);
+      }
       appendComment(text.substr(start, part_end - start));
       finishLine();
 
@@ -212,11 +257,17 @@ struct Indent {
 };
 
 [[nodiscard]] auto emitLeadingTrivia(const Token& token, Indent indent,
-                                     PrintState& state) -> TriviaEffect {
+                                     bool starts_line, PrintState& state)
+    -> TriviaEffect {
   TriviaEffect effect;
   bool seen_newline = false;
   size_t newline_count = 0;
   std::string pending_whitespace;
+  auto remaining_breaks =
+      std::ranges::count_if(token.trivia(), [](const auto& t) {
+        return t.kind == TriviaKind::EndOfLine ||
+               t.kind == TriviaKind::LineComment;
+      });
 
   for (const Trivia& trivia : token.trivia()) {
     switch (trivia.kind) {
@@ -227,12 +278,14 @@ struct Indent {
         continue;
 
       case TriviaKind::EndOfLine:
+        --remaining_breaks;
         seen_newline = true;
         ++newline_count;
         pending_whitespace.clear();
         continue;
 
       case TriviaKind::LineComment: {
+        --remaining_breaks;
         const std::string_view text = triviaText(trivia);
         if (text.empty()) {
           continue;
@@ -266,7 +319,19 @@ struct Indent {
       continue;
     }
 
-    if (!seen_newline) {
+    if (trivia.kind == TriviaKind::BlockComment && !seen_newline &&
+        starts_line &&
+        state.attachTrailingBlockComment(trivia, pending_whitespace)) {
+      pending_whitespace.clear();
+      continue;
+    }
+
+    // Leading block comments and comments before a wrapped token get their
+    // own line. Trailing comments remain attached to the preceding code above.
+    // Do not defer a block comment past a following newline / line comment:
+    // those are emitted immediately, so deferral would reverse their order.
+    if (!seen_newline && remaining_breaks == 0 &&
+        !(starts_line && trivia.kind == TriviaKind::BlockComment)) {
       effect.inline_comments.push_back(TriviaEffect::InlineComment{
           .spaces_before = std::move(pending_whitespace),
           .text = text,
@@ -281,6 +346,7 @@ struct Indent {
     }
   }
 
+  preserveBlankLines(newline_count, state);
   effect.spaces_after_inline_comments = std::move(pending_whitespace);
   return effect;
 }
@@ -301,8 +367,13 @@ auto printLine(const UnwrappedLine<FormatToken>& line, PrintState& state)
 
     const size_t tcs = (i == 0) ? ft.before.comment_spaces : 0;
 
-    const TriviaEffect trivia =
-        emitLeadingTrivia(ft.token, Indent(indent, tcs), state);
+    const TriviaEffect trivia = emitLeadingTrivia(
+        ft.token, Indent(indent, tcs),
+        i == 0 || decision.action == TokenAction::kWrap, state);
+
+    if (ft.token.kind == slang::parsing::TokenKind::EndOfFile) {
+      return;
+    }
 
     if (i == 0 || state.currentLineEmpty()) {
       state.finishLineIfNeeded();
@@ -312,7 +383,7 @@ auto printLine(const UnwrappedLine<FormatToken>& line, PrintState& state)
     } else if (decision.action == TokenAction::kWrap) {
       state.finishLine();
       state.ensureIndent(decision.spaces_before);
-    } else {
+    } else if (trivia.inline_comments.empty()) {
       state.appendSpaces(decision.spaces_before);
     }
 

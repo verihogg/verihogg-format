@@ -61,6 +61,11 @@ class SVParser {
 
   auto parse() -> UnwrapResult {
     parseLevel(TK::EndOfFile);
+    // EOF owns trailing trivia, including comments after the last statement.
+    // Keep it in the partition stream for every consumer of the unwrapper.
+    if (pos_ < tokens_.size() && at(TK::EndOfFile)) {
+      lines_.push_back({.tokens = {consume()}});
+    }
     return {
         .lines = std::move(lines_),
         .warnings = std::move(warnings_),
@@ -121,6 +126,7 @@ class SVParser {
     if (line_.tokens.empty()) {
       return;
     }
+    line_.nesting_level = indent_level_;
     line_.indentation_spaces =
         startsWithCompilerDirective(line_)
             ? 0
@@ -137,7 +143,7 @@ class SVParser {
     }
     consumeInto(line);
     int depth = 1;
-    while (pos_ < tokens_.size() && depth > 0) {
+    while (pos_ < tokens_.size() && !at(TK::EndOfFile) && depth > 0) {
       if (at(open)) {
         ++depth;
       } else if (at(close)) {
@@ -191,7 +197,11 @@ class SVParser {
   auto parseUnsupportedConstruct() -> void {
     const Token start = peek();
     warnUnsupported(start, unsupportedConstructName(start));
+    const size_t first_line = lines_.size();
     consumeUntilSemi();
+    for (size_t i = first_line; i < lines_.size(); ++i) {
+      lines_.at(i).is_fallback = true;
+    }
   }
 
   auto warnIncompatibleConditional(Token tok) -> void {

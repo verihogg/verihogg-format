@@ -94,6 +94,18 @@ output    logic                        cmp_res
 
 ---
 
+## Line joining
+
+A control header and one simple unbraced body can share a line when they fit
+within the column limit, including indentation. Fitting `else if` and `else`
+branches may join the same line. Joining preserves token order and bracket
+links. Structural nesting is independent of the configured indentation width.
+
+Blocks, nested control statements, comments, blank lines, directives, mandatory
+breaks and fallback partitions prevent joining. This stage does not insert or
+remove `begin` / `end`, parse macro expansions or normalize literals. The width
+check applies to joining; subsequent alignment and wrapping are separate stages.
+
 ## Quick start
 
 ```bash
