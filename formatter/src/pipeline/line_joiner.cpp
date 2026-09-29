@@ -59,7 +59,21 @@ using TriviaKind = slang::parsing::TriviaKind;
     return false;
   }
   const TK first = line.tokens.front().token.kind;
-  return first != TK::BeginKeyword && first != TK::ForkKeyword;
+  switch (first) {
+    case TK::ModuleKeyword:
+    case TK::MacromoduleKeyword:
+    case TK::InterfaceKeyword:
+    case TK::PackageKeyword:
+    case TK::ProgramKeyword:
+    case TK::ClassKeyword:
+    case TK::FunctionKeyword:
+    case TK::TaskKeyword:
+    case TK::GenerateKeyword:
+    case TK::CloseParenthesis:
+      return false;
+    default:
+      return first != TK::BeginKeyword && first != TK::ForkKeyword;
+  }
 }
 
 [[nodiscard]] auto isSimpleStatement(const UnwrappedLine<FormatToken>& line)

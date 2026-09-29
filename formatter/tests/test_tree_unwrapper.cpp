@@ -112,14 +112,15 @@ class TreeUnwrapperTest : public ::testing::Test {
     tokens_ = ctx_.lex_string(src);
     const format::FormatStyle style = {.column_limit = kColumnLimit,
                                        .indentation_spaces = kIndent};
-    return format::TreeUnwrapper(tokens_, style).unwrap();
+    return format::TreeUnwrapper(tokens_, style, ctx_.source_text()).unwrap();
   }
 
   auto parseWithDiagnostics(std::string_view src) -> format::UnwrapResult {
     tokens_ = ctx_.lex_string(src);
     const format::FormatStyle style = {.column_limit = kColumnLimit,
                                        .indentation_spaces = kIndent};
-    return format::TreeUnwrapper(tokens_, style).unwrapWithDiagnostics();
+    return format::TreeUnwrapper(tokens_, style, ctx_.source_text())
+        .unwrapWithDiagnostics();
   }
 
  private:
@@ -1151,16 +1152,214 @@ TEST_F(TreeUnwrapperTest, IfIsOwnLine) {
   EXPECT_EQ(snap(lines), expected);
 }
 
-TEST_F(TreeUnwrapperTest, UnsupportedCovergroupWarnsWithoutSpecialRecovery) {
-  auto result =
-      parseWithDiagnostics("module m; covergroup cg; endgroup endmodule");
+TEST_F(TreeUnwrapperTest, MacroCastDoesNotTriggerIdentifierRecovery) {
+  auto result = parseWithDiagnostics(
+      "module m;\n"
+      "  always_comb begin\n"
+      "    data = `WIDTH'(other);\n"
+      "  end\n"
+      "endmodule\n");
+  EXPECT_TRUE(result.warnings.empty());
+  for (const auto& line : result.lines) {
+    EXPECT_FALSE(line.is_opaque);
+  }
+}
 
-  ASSERT_EQ(result.warnings.size(), 2U);
-  EXPECT_EQ(result.warnings.at(0).code, "unsupported-construct");
-  EXPECT_EQ(result.warnings.at(1).code, "unsupported-construct");
-  EXPECT_NE(result.warnings.at(0).message.find("covergroup"),
+TEST_F(TreeUnwrapperTest, IdentifierStatementsContinueAcrossSourceLines) {
+  auto result = parseWithDiagnostics(
+      "module m;\n"
+      "  initial begin\n"
+      "    value = a &\n"
+      "            b +\n"
+      "            int'(c);\n"
+      "    next = value +\n"
+      "           d;\n"
+      "    casted =\n"
+      "             int'(next);\n"
+      "    incremented = ++\n"
+      "                  next;\n"
+      "  end\n"
+      "endmodule\n");
+
+  EXPECT_TRUE(result.warnings.empty());
+  size_t assignment_count = 0;
+  for (const auto& line : result.lines) {
+    EXPECT_FALSE(line.is_opaque);
+    if (line.tokens.empty()) {
+      continue;
+    }
+    const auto first = line.tokens.front().rawText();
+    if (first == "value" || first == "next" || first == "casted" ||
+        first == "incremented") {
+      ++assignment_count;
+      EXPECT_EQ(line.tokens.back().kind, TK::Semicolon);
+      bool saw_continuation = false;
+      for (const auto& token : line.tokens) {
+        if (token.rawText() == (first == "value"  ? "c"
+                                : first == "next" ? "d"
+                                                  : "next")) {
+          saw_continuation = true;
+        }
+      }
+      EXPECT_TRUE(saw_continuation);
+    }
+  }
+  EXPECT_EQ(assignment_count, 4U);
+}
+
+TEST_F(TreeUnwrapperTest, IdentifierRecoveryKeepsUnknownStatement) {
+  auto result = parseWithDiagnostics(
+      "module m;\n"
+      "  mystery words\n"
+      "  next = 1;\n"
+      "endmodule\n");
+
+  ASSERT_EQ(result.warnings.size(), 1U);
+  bool preserved_following_statement = false;
+  for (const auto& line : result.lines) {
+    if (line.is_opaque &&
+        line.raw_text.find("  next = 1;") != std::string::npos) {
+      preserved_following_statement = true;
+    }
+  }
+  EXPECT_TRUE(preserved_following_statement);
+}
+
+TEST_F(TreeUnwrapperTest, UnsupportedCovergroupPreservesBodyAndResumes) {
+  auto result = parseWithDiagnostics(
+      "module m;\n"
+      "  covergroup cg;\n"
+      "    logic should_stay ;\n"
+      "  endgroup\n"
+      "  logic b;\n"
+      "endmodule\n");
+
+  ASSERT_EQ(result.warnings.size(), 1U);
+  EXPECT_EQ(result.warnings.front().code, "unsupported-construct");
+  EXPECT_NE(result.warnings.front().message.find("covergroup"),
             std::string::npos);
-  EXPECT_NE(result.warnings.at(1).message.find("endgroup"), std::string::npos);
+
+  size_t opaque_count = 0;
+  bool resumed = false;
+  for (const auto& line : result.lines) {
+    if (line.is_opaque) {
+      ++opaque_count;
+      EXPECT_EQ(line.raw_text,
+                "\n  covergroup cg;\n"
+                "    logic should_stay ;\n"
+                "  endgroup\n");
+    } else if (!line.tokens.empty() &&
+               line.tokens.front().rawText() == "logic") {
+      resumed = true;
+    }
+  }
+  EXPECT_EQ(opaque_count, 1U);
+  EXPECT_TRUE(resumed);
+}
+
+TEST_F(TreeUnwrapperTest, NestedOpaqueBlocksResumeAfterOuterClose) {
+  auto result = parseWithDiagnostics(
+      "module m;\n"
+      "  covergroup outer;\n"
+      "    covergroup inner;\n"
+      "    endgroup\n"
+      "  endgroup\n"
+      "  logic b;\n"
+      "endmodule\n");
+
+  ASSERT_EQ(result.warnings.size(), 1U);
+  size_t opaque_count = 0;
+  bool resumed = false;
+  for (const auto& line : result.lines) {
+    if (line.is_opaque) {
+      ++opaque_count;
+      EXPECT_NE(line.raw_text.find("    endgroup\n  endgroup\n"),
+                std::string::npos);
+    } else if (!line.tokens.empty() &&
+               line.tokens.front().rawText() == "logic") {
+      resumed = true;
+    }
+  }
+  EXPECT_EQ(opaque_count, 1U);
+  EXPECT_TRUE(resumed);
+}
+
+TEST_F(TreeUnwrapperTest, UnknownBoundaryPreservesToEnclosingClose) {
+  auto result = parseWithDiagnostics(
+      "class c;\n"
+      "  constraint rule { x inside {[0:3]}; }\n"
+      "  logic should_stay ;\n"
+      "endclass\n"
+      "module m;\n"
+      "  logic b;\n"
+      "endmodule\n");
+
+  ASSERT_EQ(result.warnings.size(), 1U);
+  EXPECT_EQ(result.warnings.front().code, "unsupported-construct");
+  bool preserved_sibling = false;
+  bool resumed_module = false;
+  for (const auto& line : result.lines) {
+    if (line.is_opaque) {
+      preserved_sibling =
+          line.raw_text.find("logic should_stay ;") != std::string::npos;
+    } else if (!line.tokens.empty() &&
+               line.tokens.front().rawText() == "module") {
+      resumed_module = true;
+    }
+  }
+  EXPECT_TRUE(preserved_sibling);
+  EXPECT_TRUE(resumed_module);
+}
+
+TEST_F(TreeUnwrapperTest, UnknownTextSkipsNestedBeginBeforeOuterEnd) {
+  auto result = parseWithDiagnostics(
+      "module m;\n"
+      "  initial begin\n"
+      "    ??? unknown\n"
+      "    begin\n"
+      "      logic inner;\n"
+      "    end\n"
+      "    logic still_inside;\n"
+      "  end\n"
+      "  logic after;\n"
+      "endmodule\n");
+
+  ASSERT_EQ(result.warnings.size(), 1U);
+  bool preserved_inner_end = false;
+  bool resumed_after_outer_end = false;
+  for (const auto& line : result.lines) {
+    if (line.is_opaque) {
+      preserved_inner_end =
+          line.raw_text.find("    end\n    logic still_inside;") !=
+          std::string::npos;
+    } else if (!line.tokens.empty() &&
+               line.tokens.front().rawText() == "logic" &&
+               line.tokens.size() > 1 &&
+               line.tokens.at(1).rawText() == "after") {
+      resumed_after_outer_end = true;
+    }
+  }
+  EXPECT_TRUE(preserved_inner_end);
+  EXPECT_TRUE(resumed_after_outer_end);
+}
+
+TEST_F(TreeUnwrapperTest, ForkJoinAnyUsesSharedBlockBoundary) {
+  auto result = parseWithDiagnostics(
+      "module m;\n"
+      "  initial fork\n"
+      "    a();\n"
+      "  join_any\n"
+      "  logic b;\n"
+      "endmodule\n");
+
+  EXPECT_TRUE(result.warnings.empty());
+  bool resumed = false;
+  for (const auto& line : result.lines) {
+    if (!line.tokens.empty() && line.tokens.front().rawText() == "logic") {
+      resumed = true;
+    }
+  }
+  EXPECT_TRUE(resumed);
 }
 
 // NOLINTEND(misc-use-internal-linkage,bugprone-throwing-static-initialization,cert-err58-cpp,cppcoreguidelines-owning-memory,modernize-use-trailing-return-type)

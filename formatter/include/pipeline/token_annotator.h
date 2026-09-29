@@ -3,20 +3,31 @@
 #include <slang/parsing/Token.h>
 
 #include <gsl/span>
+#include <string_view>
 
 #include "data/format_style.h"
 #include "data/format_token.h"
+#include "data/format_warning.h"
 #include "data/unwrapped_line.h"
 
 namespace format {
+
+struct AnnotationResult {
+  std::vector<UnwrappedLine<FormatToken>> lines;
+  std::vector<FormatWarning> warnings;
+};
 
 class TokenAnnotator {
  public:
   explicit TokenAnnotator(const FormatStyle& style) : style(style) {};
 
   [[nodiscard]] auto annotate(
-      const std::vector<UnwrappedLine<slang::parsing::Token>>& lines)
+      const std::vector<UnwrappedLine<slang::parsing::Token>>& lines,
+      std::string_view original_source)
       -> std::vector<UnwrappedLine<FormatToken>>;
+  [[nodiscard]] auto annotateWithDiagnostics(
+      const std::vector<UnwrappedLine<slang::parsing::Token>>& lines,
+      std::string_view original_source) -> AnnotationResult;
 
  private:
   // Runs three sequential passes for a single logical line.

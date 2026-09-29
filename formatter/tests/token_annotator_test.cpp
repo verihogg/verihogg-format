@@ -19,17 +19,113 @@ using FT = format::FormatToken;
 
 class TokenAnnotatorTest : public ::testing::Test {
  protected:
+  auto annotateWithDiagnostics(std::string_view source)
+      -> format::AnnotationResult {
+    auto tokens = ctx_.lex_string(source);
+    auto unwrapped =
+        format::TreeUnwrapper(tokens, style, ctx_.source_text()).unwrap();
+    return format::TokenAnnotator(style).annotateWithDiagnostics(
+        unwrapped, ctx_.source_text());
+  }
+
   auto annotateTokens(std::string_view source)
       -> std::vector<format::UnwrappedLine<FT>> {
     auto tokens = ctx_.lex_string(source);
     auto unwrapped = format::TreeUnwrapper(tokens, style).unwrap();
-    return format::TokenAnnotator(style).annotate(unwrapped);
+    return format::TokenAnnotator(style).annotate(unwrapped,
+                                                  ctx_.source_text());
   }
 
  private:
   format::FormatStyle style = format::FormatStyle::defaults();
   LexContext ctx_;
 };
+
+TEST_F(TokenAnnotatorTest, InvalidBracketBecomesOpaqueWithWarning) {
+  auto result = annotateWithDiagnostics(
+      "module m;\n"
+      "  logic a;\n"
+      "  assign y  = foo]bar;   // bad\n"
+      "  logic b;\n"
+      "endmodule\n");
+  ASSERT_EQ(result.warnings.size(), 1U);
+  EXPECT_EQ(result.warnings.front().code, "invalid-annotation");
+  size_t opaque_count = 0;
+  for (const auto& line : result.lines) {
+    if (line.is_opaque) {
+      ++opaque_count;
+      EXPECT_EQ(line.raw_text, "\n  assign y  = foo]bar;   // bad\n");
+    }
+  }
+  EXPECT_EQ(opaque_count, 1U);
+}
+
+TEST_F(TokenAnnotatorTest, BasedLiteralWildcardsStayExact) {
+  auto result = annotateWithDiagnostics(
+      "module m;\n"
+      "  casez (x)\n"
+      "    4'b10??: y = 1;\n"
+      "  endcase\n"
+      "endmodule\n");
+  ASSERT_EQ(result.warnings.size(), 1U);
+  EXPECT_EQ(result.warnings.front().code, "invalid-annotation");
+  size_t opaque_count = 0;
+  for (const auto& line : result.lines) {
+    if (line.is_opaque) {
+      ++opaque_count;
+      EXPECT_EQ(line.raw_text, "\n    4'b10??: y = 1;\n");
+    }
+  }
+  EXPECT_EQ(opaque_count, 1U);
+}
+
+TEST_F(TokenAnnotatorTest, BalancedExpressionRemainsFormattable) {
+  auto result = annotateWithDiagnostics(
+      "module m (input logic a);\n"
+      "  assign y = (a ? 1 : 0);\n"
+      "  assign z = 'x;\n"
+      "endmodule\n");
+  EXPECT_TRUE(result.warnings.empty());
+  for (const auto& line : result.lines) {
+    EXPECT_FALSE(line.is_opaque);
+  }
+}
+
+TEST_F(TokenAnnotatorTest, UnhandledTokenBecomesOpaqueWithWarning) {
+  auto result = annotateWithDiagnostics(
+      "module m;\n"
+      "  assign y  = a inside {1, 2}; // unsupported\n"
+      "  logic   b ;\n"
+      "endmodule\n");
+  ASSERT_EQ(result.warnings.size(), 1U);
+  EXPECT_EQ(result.warnings.front().code, "invalid-annotation");
+  EXPECT_NE(result.warnings.front().message.find("unsupported token kind"),
+            std::string::npos);
+  ASSERT_EQ(result.lines.size(), 4U);
+  EXPECT_TRUE(result.lines.at(1).is_opaque);
+  EXPECT_EQ(result.lines.at(1).raw_text,
+            "\n  assign y  = a inside {1, 2}; // unsupported\n");
+  EXPECT_FALSE(result.lines.at(2).is_opaque);
+  for (const auto& token : result.lines.at(2).tokens) {
+    EXPECT_NE(token.type, format::TokenType::kUnknown);
+  }
+}
+
+TEST_F(TokenAnnotatorTest, RecognizedGenericTokensAreNotUnknown) {
+  auto result = annotateWithDiagnostics(
+      "module m;\n"
+      "  localparam int N = 4;\n"
+      "  logic [N-1:0] a;\n"
+      "  assign y = (a ? '1 : '0);\n"
+      "endmodule\n");
+  EXPECT_TRUE(result.warnings.empty());
+  for (const auto& line : result.lines) {
+    EXPECT_FALSE(line.is_opaque);
+    for (const auto& token : line.tokens) {
+      EXPECT_NE(token.type, format::TokenType::kUnknown);
+    }
+  }
+}
 
 TEST_F(TokenAnnotatorTest, DirectiveArgumentMustNotBreak) {
   auto lines = annotateTokens("`include \"file.svh\"");

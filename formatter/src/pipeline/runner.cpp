@@ -46,7 +46,7 @@ auto runFormatter(gsl::span<const std::filesystem::path> files,
       continue;
     }
 
-    auto result = format::format(tokens, style);
+    auto result = format::format(tokens, style, ctx.source_text());
     for (const auto& warning : result.warnings) {
       printWarning(*streams.err, path.string(), warning);
       ++warnings;

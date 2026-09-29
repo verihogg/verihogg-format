@@ -16,7 +16,7 @@ class TabularAlignerTest : public ::testing::Test {
                   format::FormatStyle style = format::FormatStyle::defaults())
       -> std::string {
     tokens_ = ctx_.lex_string(source);
-    return format::format(tokens_, style).formatted_text;
+    return format::format(tokens_, style, ctx_.source_text()).formatted_text;
   }
 
  private:

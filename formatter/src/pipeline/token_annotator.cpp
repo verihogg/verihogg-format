@@ -4,14 +4,20 @@
 #include <slang/parsing/Token.h>
 #include <slang/parsing/TokenKind.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <gsl/span>
+#include <optional>
 #include <stack>
+#include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include "data/format_token.h"
 #include "data/unwrapped_line.h"
+#include "pipeline/compiler_directives.h"
 
 namespace format {
 
@@ -391,7 +397,7 @@ auto TokenAnnotator::determineTokenTypes(gsl::span<FormatToken> tokens) const
 
       // -- Parentheses --------------------------------------------------------
       case TK::OpenParenthesis:
-        ft.type = TokenType::kUnknown;
+        ft.type = TokenType::kGeneric;
         if (was_after_hash) {
           ctx.push(Context::kParameterList);
         } else if (prev_type == TokenType::kModuleName ||
@@ -403,31 +409,31 @@ auto TokenAnnotator::determineTokenTypes(gsl::span<FormatToken> tokens) const
         continue;
 
       case TK::CloseParenthesis:
-        ft.type = TokenType::kUnknown;
+        ft.type = TokenType::kGeneric;
         if (ctx.size() > 1) {
           ctx.pop();
         }
         continue;
 
       case TK::OpenBracket:
-        ft.type = TokenType::kUnknown;
+        ft.type = TokenType::kGeneric;
         ctx.push(Context::kExpression);
         continue;
 
       case TK::CloseBracket:
-        ft.type = TokenType::kUnknown;
+        ft.type = TokenType::kGeneric;
         if (ctx.size() > 1) {
           ctx.pop();
         }
         continue;
 
       case TK::OpenBrace:
-        ft.type = TokenType::kUnknown;
+        ft.type = TokenType::kGeneric;
         ctx.push(Context::kConcatenation);
         continue;
 
       case TK::CloseBrace:
-        ft.type = TokenType::kUnknown;
+        ft.type = TokenType::kGeneric;
         if (ctx.size() > 1) {
           ctx.pop();
         }
@@ -450,18 +456,31 @@ auto TokenAnnotator::determineTokenTypes(gsl::span<FormatToken> tokens) const
         } else if (prev_type == TokenType::kTypeName) {
           ft.type = TokenType::kInstanceName;
         } else if (prev_kind == TK::Identifier &&
-                   prev_type == TokenType::kUnknown) {
+                   prev_type == TokenType::kGeneric) {
           tokens[i - 1].type = TokenType::kTypeName;
           ft.type = TokenType::kInstanceName;
         } else {
-          ft.type = TokenType::kUnknown;
+          ft.type = TokenType::kGeneric;
         }
         continue;
       }
 
       case TK::ApostropheOpenBrace:
-        ft.type = TokenType::kUnknown;
+        ft.type = TokenType::kGeneric;
         ctx.push(Context::kConcatenation);
+        continue;
+
+      // Recognized tokens handled by the general spacing rules.
+      case TK::IntegerLiteral:
+      case TK::RealLiteral:
+      case TK::TimeLiteral:
+      case TK::StringLiteral:
+      case TK::UnbasedUnsizedLiteral:
+      case TK::Apostrophe:
+      case TK::ParameterKeyword:
+      case TK::LocalParamKeyword:
+      case TK::GenVarKeyword:
+        ft.type = TokenType::kGeneric;
         continue;
 
       case TK::Directive:
@@ -496,7 +515,6 @@ auto TokenAnnotator::determineTokenTypes(gsl::span<FormatToken> tokens) const
         ft.type = TokenType::kIntegerBase;
         continue;
 
-      case TK::UnbasedUnsizedLiteral:  // '0 '1 'x 'z
       default:
         ft.type = TokenType::kUnknown;
         continue;
@@ -516,6 +534,11 @@ auto implSpacesRequired(TokenPair p) -> size_t {
 
   const TK lk = left.token.kind;
   const TK rk = right.token.kind;
+
+  // Escaped identifiers end at whitespace, even before punctuation.
+  if (lk == TK::Identifier && left.token.rawText().starts_with('\\')) {
+    return 1;
+  }
 
   if (rk == TK::IntegerBase) {
     return 0;
@@ -569,16 +592,15 @@ auto implSpacesRequired(TokenPair p) -> size_t {
        left.token.kind == TK::Question)) {
     return 0;  // "5'b?" stays as "5'b?" not "5'b ?"
   }
-  if (left.token.kind == TK::IntegerLiteral &&
-      right.token.kind == TK::Identifier) {
-    return 0;
-  }
-
   if (right.type == TokenType::kComma || right.type == TokenType::kSemicolon) {
     return 0;
   }
-  if (left.balancing == GroupBalancing::kOpen ||
-      right.balancing == GroupBalancing::kClose) {
+  // Group balancing also includes begin/end and fork/join. Only punctuation
+  // brackets suppress spaces; applying this rule to keywords can merge tokens
+  // and prevent the required line break after a block opener in fallback lines.
+  if (lk == TK::OpenParenthesis || lk == TK::OpenBracket ||
+      lk == TK::OpenBrace || rk == TK::CloseParenthesis ||
+      rk == TK::CloseBracket || rk == TK::CloseBrace) {
     return 0;
   }
   if (left.type == TokenType::kUnaryOperator) {
@@ -638,7 +660,7 @@ auto implBreakDecision(TokenPair p) -> BreakDecision {
   if (implSpacesRequired(p) == 0 && right.balancing != GroupBalancing::kClose) {
     return BreakDecision::kMustNotBreak;
   }
-  if (right.type == TokenType::kDirective) {
+  if (right.type == TokenType::kDirective && isCompilerDirective(right.token)) {
     return BreakDecision::kMustBreak;
   }
   if (left.type == TokenType::kDirective) {
@@ -657,6 +679,38 @@ auto implBreakDecision(TokenPair p) -> BreakDecision {
     return BreakDecision::kMustNotBreak;
   }
   return BreakDecision::kUndecided;
+}
+
+[[nodiscard]] auto isBasedLiteralFragment(TK kind) -> bool {
+  return kind == TK::IntegerLiteral || kind == TK::RealLiteral ||
+         kind == TK::Identifier;
+}
+
+[[nodiscard]] auto continuesBasedLiteral(gsl::span<FormatToken> tokens,
+                                         size_t index) -> bool {
+  if (!isBasedLiteralFragment(tokens[index].token.kind)) {
+    return false;
+  }
+
+  // The lexer can read hex digits such as "510e527f" as a real literal
+  // followed by an identifier. Keep adjacent fragments joined to their base.
+  for (size_t i = index; i > 0; --i) {
+    const auto& previous = tokens[i - 1].token;
+    const auto& current = tokens[i].token;
+    // Whitespace is legal between a base and its first digit. The formatter
+    // removes it, but distinct digit fragments must touch in the source.
+    if (previous.kind == TK::IntegerBase) {
+      return true;
+    }
+    if (previous.location().offset() + previous.rawText().size() !=
+        current.location().offset()) {
+      return false;
+    }
+    if (!isBasedLiteralFragment(previous.kind)) {
+      return false;
+    }
+  }
+  return false;
 }
 
 auto implComputeInterTokenInfo(gsl::span<FormatToken> tokens) -> void {
@@ -684,6 +738,10 @@ auto implComputeInterTokenInfo(gsl::span<FormatToken> tokens) -> void {
         .comment_spaces = 0,
         .break_decision = implBreakDecision(p),
     };
+    if (continuesBasedLiteral(tokens, i)) {
+      tokens[i].before.spaces_required = 0;
+      tokens[i].before.break_decision = BreakDecision::kMustNotBreak;
+    }
   }
 }
 
@@ -707,24 +765,233 @@ auto TokenAnnotator::annotateUnwrappedLine(
   annotateSpan(line.tokens);
 }
 
-auto TokenAnnotator::annotate(
-    const std::vector<UnwrappedLine<slang::parsing::Token>>& lines)
-    -> std::vector<UnwrappedLine<FormatToken>> {
-  std::vector<UnwrappedLine<FormatToken>> result;
-  result.reserve(lines.size());
+namespace {
+
+struct AnnotationFailure {
+  slang::SourceLocation location;
+  std::string reason;
+};
+
+[[nodiscard]] auto expectedClose(TK kind) -> std::optional<TK> {
+  switch (kind) {
+    case TK::OpenParenthesis:
+      return TK::CloseParenthesis;
+    case TK::OpenBracket:
+      return TK::CloseBracket;
+    case TK::OpenBrace:
+    case TK::ApostropheOpenBrace:
+      return TK::CloseBrace;
+    default:
+      return std::nullopt;
+  }
+}
+
+[[nodiscard]] auto isClose(TK kind) -> bool {
+  return kind == TK::CloseParenthesis || kind == TK::CloseBracket ||
+         kind == TK::CloseBrace;
+}
+
+[[nodiscard]] auto isBasedLiteralQuestion(
+    const std::vector<slang::parsing::Token>& tokens, size_t index) -> bool {
+  for (size_t i = index; i > 0; --i) {
+    const auto& previous = tokens.at(i - 1);
+    const auto& current = tokens.at(i);
+    if (previous.location().offset() + previous.rawText().size() !=
+        current.location().offset()) {
+      return false;
+    }
+    if (previous.kind == TK::IntegerBase) {
+      return true;
+    }
+    if (previous.kind != TK::IntegerLiteral &&
+        previous.kind != TK::Identifier && previous.kind != TK::Question) {
+      return false;
+    }
+  }
+  return false;
+}
+
+[[nodiscard]] auto validateLine(
+    const UnwrappedLine<slang::parsing::Token>& line)
+    -> std::optional<AnnotationFailure> {
+  std::vector<TK> bracket_stack;
+  std::vector<std::pair<size_t, slang::SourceLocation>> questions;
+  for (size_t i = 0; i < line.tokens.size(); ++i) {
+    const auto& token = line.tokens.at(i);
+    const TK kind = token.kind;
+    if (kind == TK::Unknown) {
+      return AnnotationFailure{.location = token.location(),
+                               .reason = "unknown lexical token"};
+    }
+    if (auto close = expectedClose(kind)) {
+      bracket_stack.push_back(*close);
+      continue;
+    }
+    if (isClose(kind)) {
+      if (bracket_stack.empty()) {
+        // A module or parameter list can close on its own unwrapped line.
+        if (kind != TK::CloseParenthesis || i != 0) {
+          return AnnotationFailure{.location = token.location(),
+                                   .reason = "unmatched closing bracket"};
+        }
+      } else if (bracket_stack.back() != kind) {
+        return AnnotationFailure{.location = token.location(),
+                                 .reason = "mismatched closing bracket"};
+      } else {
+        bracket_stack.pop_back();
+      }
+      continue;
+    }
+    if (kind == TK::Question) {
+      if (isBasedLiteralQuestion(line.tokens, i)) {
+        return AnnotationFailure{
+            .location = token.location(),
+            .reason = "based literal wildcard is not supported"};
+      }
+      questions.emplace_back(bracket_stack.size(), token.location());
+    } else if (kind == TK::Colon && !questions.empty() &&
+               questions.back().first == bracket_stack.size()) {
+      questions.pop_back();
+    }
+  }
+  if (!questions.empty()) {
+    return AnnotationFailure{
+        .location = questions.back().second,
+        .reason = "conditional operator has no matching colon"};
+  }
+  if (!bracket_stack.empty() && !line.tokens.empty() &&
+      line.tokens.back().kind == TK::Semicolon) {
+    return AnnotationFailure{.location = line.tokens.back().location(),
+                             .reason = "unclosed bracket before statement end"};
+  }
+  return std::nullopt;
+}
+
+[[nodiscard]] auto lineStart(std::string_view source, size_t offset) -> size_t {
+  offset = std::min(offset, source.size());
+  if (offset == 0) {
+    return 0;
+  }
+  const size_t newline = source.find_last_of("\r\n", offset - 1);
+  return newline == std::string_view::npos ? 0 : newline + 1;
+}
+
+[[nodiscard]] auto canResumeAt(const UnwrappedLine<FormatToken>& line,
+                               std::string_view source, size_t failed_offset)
+    -> bool {
+  if (line.is_opaque || line.tokens.empty()) {
+    return false;
+  }
+  const size_t offset =
+      std::min(line.tokens.front().token.location().offset(), source.size());
+  const size_t start = lineStart(source, offset);
+  return start > failed_offset &&
+         std::ranges::all_of(source.substr(start, offset - start),
+                             [](char ch) { return ch == ' ' || ch == '\t'; });
+}
+
+}  // namespace
+
+auto TokenAnnotator::annotateWithDiagnostics(
+    const std::vector<UnwrappedLine<slang::parsing::Token>>& lines,
+    std::string_view original_source) -> AnnotationResult {
+  AnnotationResult result;
+  result.lines.reserve(lines.size());
+  std::vector<std::optional<AnnotationFailure>> failures;
+  failures.reserve(lines.size());
 
   for (const auto& line : lines) {
-    result.push_back(
+    auto failure = original_source.empty() || line.is_opaque
+                       ? std::nullopt
+                       : validateLine(line);
+    result.lines.push_back(
         line.map([](const slang::parsing::Token& tok) -> FormatToken {
           return FormatToken{.token = tok};
         }));
+    if (!failure) {
+      annotateUnwrappedLine(result.lines.back());
+      if (!original_source.empty() && !line.is_opaque) {
+        for (const auto& token : result.lines.back().tokens) {
+          if (token.type == TokenType::kUnknown) {
+            failure = AnnotationFailure{
+                .location = token.token.location(),
+                .reason =
+                    "unsupported token kind " +
+                    std::string(slang::parsing::toString(token.token.kind))};
+            break;
+          }
+        }
+      }
+    }
+    failures.push_back(failure);
+    if (failure) {
+      result.warnings.push_back({
+          .location = failure->location,
+          .code = "invalid-annotation",
+          .message = "cannot annotate SystemVerilog line (" + failure->reason +
+                     "); original text preserved",
+      });
+    }
   }
 
-  for (auto& line : result) {
-    annotateUnwrappedLine(line);
+  if (result.warnings.empty()) {
+    return result;
   }
 
+  std::vector<UnwrappedLine<FormatToken>> recovered;
+  recovered.reserve(result.lines.size());
+  size_t source_cursor = 0;
+  for (size_t i = 0; i < result.lines.size();) {
+    auto& line = result.lines.at(i);
+    if (!failures.at(i)) {
+      if (line.is_opaque) {
+        source_cursor = std::min(source_cursor + line.raw_text.size(),
+                                 original_source.size());
+      } else if (!line.tokens.empty()) {
+        const auto& last = line.tokens.back().token;
+        source_cursor =
+            std::min(last.location().offset() + last.rawText().size(),
+                     original_source.size());
+      }
+      recovered.push_back(std::move(line));
+      ++i;
+      continue;
+    }
+
+    size_t next = i + 1;
+    while (next < result.lines.size() &&
+           (failures.at(next) ||
+            !canResumeAt(result.lines.at(next), original_source,
+                         line.tokens.front().token.location().offset()))) {
+      ++next;
+    }
+    const size_t raw_end =
+        next == result.lines.size()
+            ? original_source.size()
+            : lineStart(original_source, result.lines.at(next)
+                                             .tokens.front()
+                                             .token.location()
+                                             .offset());
+    if (raw_end > source_cursor) {
+      recovered.push_back({
+          .tokens = {},
+          .raw_text = std::string(
+              original_source.substr(source_cursor, raw_end - source_cursor)),
+          .is_opaque = true,
+      });
+    }
+    source_cursor = raw_end;
+    i = next;
+  }
+  result.lines = std::move(recovered);
   return result;
+}
+
+auto TokenAnnotator::annotate(
+    const std::vector<UnwrappedLine<slang::parsing::Token>>& lines,
+    std::string_view original_source)
+    -> std::vector<UnwrappedLine<FormatToken>> {
+  return annotateWithDiagnostics(lines, original_source).lines;
 }
 
 }  // namespace format

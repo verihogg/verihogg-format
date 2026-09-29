@@ -4,6 +4,8 @@
 #include <slang/parsing/Token.h>
 #include <slang/parsing/TokenKind.h>
 
+#include <algorithm>
+#include <cstdint>
 #include <functional>
 #include <gsl/span>
 #include <optional>
@@ -56,8 +58,12 @@ using Line = UnwrappedLine<Token>;
 
 class SVParser {
  public:
-  SVParser(gsl::span<const Token> tokens, const FormatStyle& style)
-      : tokens_(tokens), style_(style) {}
+  SVParser(gsl::span<const Token> tokens, const FormatStyle& style,
+           std::string_view source)
+      : tokens_(tokens),
+        style_(style),
+        source_(source),
+        recovery_enabled_(!source.empty()) {}
 
   auto parse() -> UnwrapResult {
     parseLevel(TK::EndOfFile);
@@ -90,6 +96,7 @@ class SVParser {
 
   gsl::span<const Token> tokens_;
   std::reference_wrapper<const FormatStyle> style_;
+  std::string_view source_;
   size_t pos_ = 0;
   Line line_;
   std::vector<Line> lines_;
@@ -97,6 +104,7 @@ class SVParser {
   size_t indent_level_ = 0;
   std::vector<BlockFrame> block_stack_;
   bool stop_at_conditional_boundary_ = false;
+  bool recovery_enabled_ = true;
 
   // ---- token access ----
 
@@ -176,7 +184,9 @@ class SVParser {
         .location = tok.location(),
         .code = "unsupported-construct",
         .message = "unsupported SystemVerilog construct '" +
-                   std::string(construct) + "'; formatted in fallback mode",
+                   std::string(construct) +
+                   (recovery_enabled_ ? "'; original text preserved"
+                                      : "'; original source unavailable"),
     });
   }
 
@@ -188,10 +198,356 @@ class SVParser {
     return "unknown";
   }
 
+  enum class BlockLayout : std::uint8_t {
+    Structural,
+    Named,
+    Simple,
+    BeginEnd,
+    Fork,
+    Case,
+    Opaque,
+  };
+
+  struct BlockSpec {
+    TK close_kind;
+    BlockLayout layout;
+  };
+
+  // Every keyword-delimited block enters the parser through this table. A
+  // block may have a known boundary even when its contents are not supported.
+  [[nodiscard]] static auto blockSpec(TK kind) -> std::optional<BlockSpec> {
+    switch (kind) {
+      case TK::ModuleKeyword:
+      case TK::MacromoduleKeyword:
+        return BlockSpec{.close_kind = TK::EndModuleKeyword,
+                         .layout = BlockLayout::Structural};
+      case TK::InterfaceKeyword:
+        return BlockSpec{.close_kind = TK::EndInterfaceKeyword,
+                         .layout = BlockLayout::Structural};
+      case TK::PackageKeyword:
+        return BlockSpec{.close_kind = TK::EndPackageKeyword,
+                         .layout = BlockLayout::Structural};
+      case TK::ProgramKeyword:
+        return BlockSpec{.close_kind = TK::EndProgramKeyword,
+                         .layout = BlockLayout::Structural};
+      case TK::ClassKeyword:
+        return BlockSpec{.close_kind = TK::EndClassKeyword,
+                         .layout = BlockLayout::Named};
+      case TK::FunctionKeyword:
+        return BlockSpec{.close_kind = TK::EndFunctionKeyword,
+                         .layout = BlockLayout::Named};
+      case TK::TaskKeyword:
+        return BlockSpec{.close_kind = TK::EndTaskKeyword,
+                         .layout = BlockLayout::Named};
+      case TK::GenerateKeyword:
+        return BlockSpec{.close_kind = TK::EndGenerateKeyword,
+                         .layout = BlockLayout::Simple};
+      case TK::BeginKeyword:
+        return BlockSpec{.close_kind = TK::EndKeyword,
+                         .layout = BlockLayout::BeginEnd};
+      case TK::ForkKeyword:
+        return BlockSpec{.close_kind = TK::JoinKeyword,
+                         .layout = BlockLayout::Fork};
+      case TK::CaseKeyword:
+      case TK::CaseXKeyword:
+      case TK::CaseZKeyword:
+        return BlockSpec{.close_kind = TK::EndCaseKeyword,
+                         .layout = BlockLayout::Case};
+      case TK::CoverGroupKeyword:
+        return BlockSpec{.close_kind = TK::EndGroupKeyword,
+                         .layout = BlockLayout::Opaque};
+      case TK::PropertyKeyword:
+        return BlockSpec{.close_kind = TK::EndPropertyKeyword,
+                         .layout = BlockLayout::Opaque};
+      case TK::SequenceKeyword:
+        return BlockSpec{.close_kind = TK::EndSequenceKeyword,
+                         .layout = BlockLayout::Opaque};
+      case TK::ClockingKeyword:
+        return BlockSpec{.close_kind = TK::EndClockingKeyword,
+                         .layout = BlockLayout::Opaque};
+      case TK::CheckerKeyword:
+        return BlockSpec{.close_kind = TK::EndCheckerKeyword,
+                         .layout = BlockLayout::Opaque};
+      case TK::SpecifyKeyword:
+        return BlockSpec{.close_kind = TK::EndSpecifyKeyword,
+                         .layout = BlockLayout::Opaque};
+      case TK::PrimitiveKeyword:
+        return BlockSpec{.close_kind = TK::EndPrimitiveKeyword,
+                         .layout = BlockLayout::Opaque};
+      case TK::ConfigKeyword:
+        return BlockSpec{.close_kind = TK::EndConfigKeyword,
+                         .layout = BlockLayout::Opaque};
+      case TK::TableKeyword:
+        return BlockSpec{.close_kind = TK::EndTableKeyword,
+                         .layout = BlockLayout::Opaque};
+      default:
+        return std::nullopt;
+    }
+  }
+
+  [[nodiscard]] static auto matchesBlockClose(TK expected, TK actual) -> bool {
+    return actual == expected ||
+           (expected == TK::JoinKeyword &&
+            (actual == TK::JoinAnyKeyword || actual == TK::JoinNoneKeyword));
+  }
+
+  [[nodiscard]] static auto nestedClose(TK kind) -> std::optional<TK> {
+    switch (kind) {
+      case TK::OpenParenthesis:
+        return TK::CloseParenthesis;
+      case TK::OpenBracket:
+        return TK::CloseBracket;
+      case TK::OpenBrace:
+      case TK::ApostropheOpenBrace:
+        return TK::CloseBrace;
+      case TK::BeginKeyword:
+        return TK::EndKeyword;
+      case TK::CaseKeyword:
+      case TK::CaseXKeyword:
+      case TK::CaseZKeyword:
+        return TK::EndCaseKeyword;
+      default:
+        return std::nullopt;
+    }
+  }
+
+  [[nodiscard]] auto sourceLineStart(size_t index) const -> size_t {
+    const size_t offset =
+        std::min(tokens_[index].location().offset(), source_.size());
+    if (offset == 0) {
+      return 0;
+    }
+    const size_t newline = source_.find_last_of("\r\n", offset - 1);
+    return newline == std::string_view::npos ? 0 : newline + 1;
+  }
+
+  [[nodiscard]] auto cleanLineStart(size_t index, size_t after) const -> bool {
+    if (index >= tokens_.size() || tokens_[index].kind == TK::EndOfFile) {
+      return false;
+    }
+    const size_t start = sourceLineStart(index);
+    const size_t offset =
+        std::min(tokens_[index].location().offset(), source_.size());
+    if (start <= tokens_[after].location().offset()) {
+      return false;
+    }
+    const auto leading = source_.substr(start, offset - start);
+    return std::ranges::all_of(leading,
+                               [](char ch) { return ch == ' ' || ch == '\t'; });
+  }
+
+  [[nodiscard]] auto isKnownStart(size_t index) const -> bool {
+    const TK kind = tokens_[index].kind;
+    if (block_stack_.empty()) {
+      return kind == TK::ModuleKeyword || kind == TK::MacromoduleKeyword ||
+             kind == TK::InterfaceKeyword || kind == TK::PackageKeyword ||
+             kind == TK::ProgramKeyword || kind == TK::Directive;
+    }
+    switch (kind) {
+      case TK::InputKeyword:
+      case TK::OutputKeyword:
+      case TK::InOutKeyword:
+      case TK::RefKeyword:
+      case TK::WireKeyword:
+      case TK::RegKeyword:
+      case TK::LogicKeyword:
+      case TK::BitKeyword:
+      case TK::IntKeyword:
+      case TK::IntegerKeyword:
+      case TK::GenVarKeyword:
+      case TK::ParameterKeyword:
+      case TK::LocalParamKeyword:
+      case TK::TypedefKeyword:
+      case TK::AssignKeyword:
+      case TK::AlwaysKeyword:
+      case TK::AlwaysCombKeyword:
+      case TK::AlwaysFFKeyword:
+      case TK::AlwaysLatchKeyword:
+      case TK::InitialKeyword:
+      case TK::FinalKeyword:
+      case TK::BeginKeyword:
+      case TK::IfKeyword:
+      case TK::CaseKeyword:
+      case TK::CaseXKeyword:
+      case TK::CaseZKeyword:
+      case TK::ForKeyword:
+      case TK::ForeachKeyword:
+      case TK::WhileKeyword:
+      case TK::RepeatKeyword:
+      case TK::ForeverKeyword:
+      case TK::FunctionKeyword:
+      case TK::TaskKeyword:
+      case TK::ClassKeyword:
+      case TK::GenerateKeyword:
+      case TK::Directive:
+        return true;
+      default:
+        return kind == TK::Identifier;
+    }
+  }
+
+  // An identifier or literal can complete an expression; an operator needs
+  // another operand even if that operand starts on the next source line.
+  [[nodiscard]] static auto canEndExpression(TK kind) -> bool {
+    switch (kind) {
+      case TK::Identifier:
+      case TK::SystemIdentifier:
+      case TK::IntegerLiteral:
+      case TK::RealLiteral:
+      case TK::TimeLiteral:
+      case TK::StringLiteral:
+      case TK::UnbasedUnsizedLiteral:
+      case TK::CloseParenthesis:
+      case TK::CloseBracket:
+      case TK::CloseBrace:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  // Skip an unsupported block using the same delimiter table as the normal
+  // parser. Inner blocks cannot terminate the outer unsupported block.
+  [[nodiscard]] auto findPairedEnd(size_t start, TK close) const
+      -> std::optional<size_t> {
+    std::vector<TK> expected{close};
+    for (size_t i = start + 1;
+         i < tokens_.size() && tokens_[i].kind != TK::EndOfFile; ++i) {
+      if (stop_at_conditional_boundary_ &&
+          isConditionalBoundaryDirective(tokens_[i])) {
+        return std::nullopt;
+      }
+      if (auto nested = blockSpec(tokens_[i].kind)) {
+        expected.push_back(nested->close_kind);
+      } else if (matchesBlockClose(expected.back(), tokens_[i].kind)) {
+        expected.pop_back();
+        if (expected.empty()) {
+          size_t after = i + 1;
+          if (after + 1 < tokens_.size() && tokens_[after].kind == TK::Colon &&
+              tokens_[after + 1].kind == TK::Identifier) {
+            after += 2;
+          }
+          return after;
+        }
+      }
+    }
+    return std::nullopt;
+  }
+
+  // A construct with no known delimiter can only be skipped up to the
+  // enclosing block's closing token (or a conditional branch boundary).
+  [[nodiscard]] auto findOuterBoundary(size_t start) const -> size_t {
+    std::vector<TK> nested;
+    for (size_t i = start + 1;
+         i < tokens_.size() && tokens_[i].kind != TK::EndOfFile; ++i) {
+      const TK kind = tokens_[i].kind;
+      if (stop_at_conditional_boundary_ &&
+          isConditionalBoundaryDirective(tokens_[i]) &&
+          cleanLineStart(i, start)) {
+        return i;
+      }
+      if (auto block = blockSpec(kind)) {
+        nested.push_back(block->close_kind);
+        continue;
+      }
+      if (!nested.empty() && matchesBlockClose(nested.back(), kind)) {
+        nested.pop_back();
+        continue;
+      }
+      if (nested.empty() && !block_stack_.empty() &&
+          matchesBlockClose(block_stack_.back().close_kind, kind) &&
+          cleanLineStart(i, start)) {
+        return i;
+      }
+    }
+    return tokens_.size() - 1;
+  }
+
+  // Include trivia after the previous formatted token. When resuming on a
+  // clean source line, leave that line's indentation to the printer.
+  auto emitOpaque(size_t begin, size_t resume) -> void {
+    addLine();
+    const size_t raw_begin =
+        begin == 0 ? 0
+                   : std::min(tokens_[begin - 1].location().offset() +
+                                  tokens_[begin - 1].rawText().size(),
+                              source_.size());
+    const size_t raw_end =
+        resume == tokens_.size() - 1 ? source_.size()
+        : cleanLineStart(resume, begin)
+            ? sourceLineStart(resume)
+            : std::min(tokens_[resume].location().offset(), source_.size());
+    if (raw_end > raw_begin) {
+      lines_.push_back(Line{.tokens = {},
+                            .raw_text = std::string(
+                                source_.substr(raw_begin, raw_end - raw_begin)),
+                            .is_opaque = true});
+    }
+    pos_ = resume;
+  }
+
+  // Identifier-led declarations and assignments end at a semicolon. A line
+  // break after an operator still belongs to the same expression; a new
+  // statement after a complete expression may require recovery.
+  auto parseIdentifierStatement() -> void {
+    const size_t start = pos_;
+    std::vector<TK> nesting;
+    for (size_t i = start + 1;
+         i < tokens_.size() && tokens_[i].kind != TK::EndOfFile; ++i) {
+      const TK kind = tokens_[i].kind;
+      if (nesting.empty()) {
+        if (kind == TK::Directive &&
+            sourceLineStart(i) == sourceLineStart(start)) {
+          consumeUntilSemi();
+          return;
+        }
+        if (kind == TK::Semicolon) {
+          consumeUntilSemi();
+          return;
+        }
+        if (cleanLineStart(i, start) &&
+            ((!block_stack_.empty() &&
+              matchesBlockClose(block_stack_.back().close_kind, kind)) ||
+             (stop_at_conditional_boundary_ &&
+              isConditionalBoundaryDirective(tokens_[i])) ||
+             (isKnownStart(i) &&
+              (kind == TK::Directive || blockSpec(kind).has_value() ||
+               canEndExpression(tokens_[i - 1].kind))))) {
+          warnUnsupported(peek(), unsupportedConstructName(peek()));
+          emitOpaque(start, findOuterBoundary(start));
+          return;
+        }
+      }
+      if (auto close = nestedClose(kind)) {
+        nesting.push_back(*close);
+      } else if (!nesting.empty() && kind == nesting.back()) {
+        nesting.pop_back();
+      }
+    }
+    warnUnsupported(peek(), unsupportedConstructName(peek()));
+    emitOpaque(start, findOuterBoundary(start));
+  }
+
+  auto parseOpaqueBlock(TK close) -> void {
+    const size_t start = pos_;
+    warnUnsupported(peek(), unsupportedConstructName(peek()));
+    if (!recovery_enabled_) {
+      consumeUntilSemi();
+      return;
+    }
+    const auto after = findPairedEnd(start, close);
+    const size_t resume = after ? *after : findOuterBoundary(start);
+    emitOpaque(start, resume);
+  }
+
   auto parseUnsupportedConstruct() -> void {
-    const Token start = peek();
-    warnUnsupported(start, unsupportedConstructName(start));
-    consumeUntilSemi();
+    const size_t start = pos_;
+    warnUnsupported(peek(), unsupportedConstructName(peek()));
+    if (!recovery_enabled_) {
+      consumeUntilSemi();
+      return;
+    }
+    emitOpaque(start, findOuterBoundary(start));
   }
 
   auto warnIncompatibleConditional(Token tok) -> void {
@@ -349,7 +705,7 @@ class SVParser {
 
   [[nodiscard]] auto parseBranch(const ParserState& state) const
       -> BranchResult {
-    SVParser branch(tokens_, style_.get());
+    SVParser branch(tokens_, style_.get(), source_);
     branch.restoreState(state);
     branch.lines_.clear();
     branch.warnings_.clear();
@@ -426,7 +782,8 @@ class SVParser {
   }
 
   [[nodiscard]] auto matchingOpenFrame(TK kind) const -> bool {
-    return !block_stack_.empty() && block_stack_.back().close_kind == kind;
+    return !block_stack_.empty() &&
+           matchesBlockClose(block_stack_.back().close_kind, kind);
   }
 
   auto parseOpenFrameClose() -> void {
@@ -452,6 +809,15 @@ class SVParser {
     block_stack_.push_back(BlockFrame{.close_kind = closeKind});
   }
 
+  auto parseDelimitedBody(TK closeKind) -> void {
+    pushOpenFrame(closeKind);
+    ++indent_level_;
+    parseLevel(closeKind);
+    if (matchesBlockClose(closeKind, peek().kind)) {
+      parseOpenFrameClose();
+    }
+  }
+
   auto parseIndentedStatement() -> void {
     const size_t stack_size_before = block_stack_.size();
     ++indent_level_;
@@ -470,7 +836,7 @@ class SVParser {
   auto parseLevel(TK stopKind) -> void {
     while (pos_ < tokens_.size()) {
       auto kind = peek().kind;
-      if (kind == stopKind || kind == TK::EndOfFile) {
+      if (matchesBlockClose(stopKind, kind) || kind == TK::EndOfFile) {
         break;
       }
       if (stop_at_conditional_boundary_ &&
@@ -504,42 +870,34 @@ class SVParser {
       return;
     }
 
+    if (const auto block = blockSpec(peek().kind)) {
+      switch (block->layout) {
+        case BlockLayout::Structural:
+          parseStructuralBlock(block->close_kind);
+          break;
+        case BlockLayout::Named:
+          parseNamedBlock(block->close_kind);
+          break;
+        case BlockLayout::Simple:
+          parseSimpleBlock(block->close_kind);
+          break;
+        case BlockLayout::BeginEnd:
+          parseBeginEnd(block->close_kind);
+          break;
+        case BlockLayout::Fork:
+          parseFork(block->close_kind);
+          break;
+        case BlockLayout::Case:
+          parseCase(block->close_kind);
+          break;
+        case BlockLayout::Opaque:
+          parseOpaqueBlock(block->close_kind);
+          break;
+      }
+      return;
+    }
+
     switch (peek().kind) {
-      case TK::ModuleKeyword:
-      case TK::MacromoduleKeyword:
-        parseStructuralBlock(TK::EndModuleKeyword);
-        break;
-      case TK::InterfaceKeyword:
-        parseStructuralBlock(TK::EndInterfaceKeyword);
-        break;
-      case TK::PackageKeyword:
-        parseStructuralBlock(TK::EndPackageKeyword);
-        break;
-      case TK::ProgramKeyword:
-        parseStructuralBlock(TK::EndProgramKeyword);
-        break;
-
-      case TK::ClassKeyword:
-        parseNamedBlock(TK::EndClassKeyword);
-        break;
-      case TK::FunctionKeyword:
-        parseNamedBlock(TK::EndFunctionKeyword);
-        break;
-      case TK::TaskKeyword:
-        parseNamedBlock(TK::EndTaskKeyword);
-        break;
-
-      case TK::GenerateKeyword:
-        parseSimpleBlock(TK::EndGenerateKeyword);
-        break;
-
-      case TK::BeginKeyword:
-        parseBeginEnd();
-        break;
-      case TK::ForkKeyword:
-        parseFork();
-        break;
-
       case TK::AlwaysKeyword:
       case TK::AlwaysCombKeyword:
       case TK::AlwaysFFKeyword:
@@ -559,12 +917,6 @@ class SVParser {
         } else {
           parseUnsupportedConstruct();
         }
-        break;
-
-      case TK::CaseKeyword:
-      case TK::CaseXKeyword:
-      case TK::CaseZKeyword:
-        parseCase();
         break;
 
       case TK::ForKeyword:
@@ -587,6 +939,12 @@ class SVParser {
         break;
 
       case TK::AssignKeyword:
+      case TK::InputKeyword:
+      case TK::OutputKeyword:
+      case TK::InOutKeyword:
+      case TK::RefKeyword:
+      case TK::WireKeyword:
+      case TK::RegKeyword:
       case TK::BitKeyword:
       case TK::BreakKeyword:
       case TK::ByteKeyword:
@@ -605,8 +963,13 @@ class SVParser {
         break;
 
       default:
-        if (slang::parsing::LexerFacts::isKeyword(peek().kind)) {
+        if (slang::parsing::LexerFacts::isKeyword(peek().kind) ||
+            peek().kind == TK::Unknown || peek().kind == TK::Question ||
+            peek().kind == TK::CloseParenthesis ||
+            peek().kind == TK::CloseBracket) {
           parseUnsupportedConstruct();
+        } else if (peek().kind == TK::Identifier && recovery_enabled_) {
+          parseIdentifierStatement();
         } else {
           consumeUntilSemi();
         }
@@ -676,6 +1039,59 @@ class SVParser {
 
   // `ifdef / `define / `include / ... — consume to end of source line
   auto parseDirectiveLine() -> void {
+    // Preserve directives whose spacing or keyword text can affect parsing.
+    // Macro definitions can also contain line continuations.
+    const auto directive = peek().rawText();
+    if (recovery_enabled_ &&
+        (directive == "`define" || directive == "`pragma" ||
+         directive == "`timescale")) {
+      addLine();
+      const size_t start = pos_;
+      const size_t source_end =
+          std::min(tokens_.back().location().offset(), source_.size());
+      const size_t raw_begin =
+          start == 0 ? 0
+          : !lines_.empty() && lines_.back().is_opaque
+              ? sourceLineStart(start)
+              : std::min(tokens_[start - 1].location().offset() +
+                             tokens_[start - 1].rawText().size(),
+                         source_end);
+
+      size_t raw_end = std::min(tokens_[start].location().offset(), source_end);
+      while (raw_end < source_end) {
+        const size_t newline = source_.find_first_of("\r\n", raw_end);
+        if (newline == std::string_view::npos || newline >= source_end) {
+          raw_end = source_end;
+          break;
+        }
+        const bool continued =
+            newline > raw_end && source_.at(newline - 1) == '\\';
+        raw_end = newline + 1;
+        if (source_.at(newline) == '\r' && raw_end < source_end &&
+            source_.at(raw_end) == '\n') {
+          ++raw_end;
+        }
+        if (!continued) {
+          break;
+        }
+      }
+
+      while (!at(TK::EndOfFile) &&
+             tokens_[pos_].location().offset() < raw_end) {
+        ++pos_;
+      }
+      // The printer skips the next token's leading trivia after an opaque
+      // line, so include intervening comments and blank lines here.
+      raw_end = at(TK::EndOfFile) ? source_end : sourceLineStart(pos_);
+      lines_.push_back(Line{
+          .tokens = {},
+          .raw_text =
+              std::string(source_.substr(raw_begin, raw_end - raw_begin)),
+          .is_opaque = true,
+      });
+      return;
+    }
+
     consumeInto(line_);
     while (pos_ < tokens_.size() && !at(TK::EndOfFile)) {
       if (hasLeadingNewline(peek())) {
@@ -842,12 +1258,7 @@ class SVParser {
     }
     addLine();
 
-    pushOpenFrame(closeKw);
-    ++indent_level_;
-    parseLevel(closeKw);
-    if (at(closeKw)) {
-      parseOpenFrameClose();
-    }
+    parseDelimitedBody(closeKw);
   }
 
   // class / function / task ... endclass / endfunction / endtask
@@ -865,12 +1276,7 @@ class SVParser {
     }
     addLine();
 
-    pushOpenFrame(closeKw);
-    ++indent_level_;
-    parseLevel(closeKw);
-    if (at(closeKw)) {
-      parseOpenFrameClose();
-    }
+    parseDelimitedBody(closeKw);
   }
 
   // generate ... endgenerate
@@ -881,48 +1287,24 @@ class SVParser {
     }
     addLine();
 
-    pushOpenFrame(closeKw);
-    ++indent_level_;
-    parseLevel(closeKw);
-    if (at(closeKw)) {
-      parseOpenFrameClose();
-    }
+    parseDelimitedBody(closeKw);
   }
 
   // begin [:label] ... end [:label]
-  auto parseBeginEnd() -> void {
+  auto parseBeginEnd(TK closeKw) -> void {
     consumeInto(line_);  // begin
     consumeLabel();
     addLine();
 
-    pushOpenFrame(TK::EndKeyword);
-    ++indent_level_;
-    parseLevel(TK::EndKeyword);
-    if (at(TK::EndKeyword)) {
-      parseOpenFrameClose();
-    }
+    parseDelimitedBody(closeKw);
   }
 
   // fork ... join / join_any / join_none
-  auto parseFork() -> void {
-    consumeInto(line_);  // fork
+  auto parseFork(TK closeKw) -> void {
+    consumeInto(line_);
     consumeLabel();
     addLine();
-
-    ++indent_level_;
-    while (pos_ < tokens_.size()) {
-      auto k = peek().kind;
-      if (k == TK::JoinKeyword || k == TK::JoinAnyKeyword ||
-          k == TK::JoinNoneKeyword || k == TK::EndOfFile) {
-        break;
-      }
-      parseStatement();
-    }
-    --indent_level_;
-
-    consumeInto(line_);  // join / join_any / join_none
-    consumeLabel();
-    addLine();
+    parseDelimitedBody(closeKw);
   }
 
   // always / always_comb / always_ff / always_latch / initial / final
@@ -960,14 +1342,14 @@ class SVParser {
   }
 
   // case/casex/casez (...) ... endcase
-  auto parseCase() -> void {
+  auto parseCase(TK closeKw) -> void {
     consumeInto(line_);  // case / casex / casez
     consumeBalancedInto(TK::OpenParenthesis, TK::CloseParenthesis, line_);
     addLine();
 
-    pushOpenFrame(TK::EndCaseKeyword);
+    pushOpenFrame(closeKw);
     ++indent_level_;
-    while (!at(TK::EndCaseKeyword) && !at(TK::EndOfFile)) {
+    while (!at(closeKw) && !at(TK::EndOfFile)) {
       if (stop_at_conditional_boundary_ &&
           isConditionalBoundaryDirective(peek())) {
         return;
@@ -984,7 +1366,7 @@ class SVParser {
       }
     }
 
-    if (at(TK::EndCaseKeyword)) {
+    if (at(closeKw)) {
       parseOpenFrameClose();
     }
   }
@@ -1032,7 +1414,7 @@ class SVParser {
 
 [[nodiscard]] auto TreeUnwrapper::unwrapWithDiagnostics() const
     -> UnwrapResult {
-  SVParser parser(tokens, style.get());
+  SVParser parser(tokens, style.get(), original_source);
   return parser.parse();
 }
 

@@ -35,7 +35,8 @@ enum class GroupBalancing : uint8_t {
 };
 
 enum class TokenType : uint8_t {
-  kUnknown,
+  kUnknown,  // no annotation rule; the containing line must be preserved
+  kGeneric,  // recognized token handled by the general spacing rules
 
   // Operators
   kBinaryOperator,
