@@ -129,7 +129,8 @@ class Scr1IntegrationTest : public ::testing::TestWithParam<std::string> {
     auto tokens = ctx.lex_string(original);
     ASSERT_FALSE(tokens.empty()) << "Failed to lex: " << path;
 
-    auto result = format::format(tokens, format::FormatStyle{});
+    auto result =
+        format::format(tokens, format::FormatStyle{}, ctx.source_text());
 
     // fromText for both so neither expands `include / macros — same pipeline
     auto origTree = slang::syntax::SyntaxTree::fromText(original, sm, path);

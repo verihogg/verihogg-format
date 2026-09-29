@@ -5,6 +5,7 @@
 #include <concepts>
 #include <cstdint>
 #include <iostream>
+#include <string>
 #include <vector>
 
 #include "format_style.h"
@@ -22,6 +23,8 @@ enum class PartitionPolicy : uint8_t {
 template <typename Token>
 struct UnwrappedLine {
   std::vector<Token> tokens;
+  std::string raw_text;
+  bool is_opaque = false;
 
   IndentLevel indentation_spaces = 0;
   PartitionPolicy partition_policy = PartitionPolicy::kAlwaysExpand;
@@ -38,6 +41,8 @@ struct UnwrappedLine {
         });
     return {
         .tokens = std::move(tokens),
+        .raw_text = std::move(this->raw_text),
+        .is_opaque = this->is_opaque,
         .indentation_spaces = this->indentation_spaces,
         .partition_policy = this->partition_policy,
     };
@@ -54,6 +59,8 @@ struct UnwrappedLine {
                    });
     return {
         .tokens = std::move(tokens),
+        .raw_text = this->raw_text,
+        .is_opaque = this->is_opaque,
         .indentation_spaces = this->indentation_spaces,
         .partition_policy = this->partition_policy,
     };

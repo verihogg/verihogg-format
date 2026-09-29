@@ -60,7 +60,31 @@ using Line = PolicyAssigner::Line;
   return true;
 }
 
+[[nodiscard]] auto isControlHeader(const Line& line) -> bool {
+  if (line.tokens.empty()) {
+    return false;
+  }
+  switch (line.tokens.front().token.kind) {
+    case TK::IfKeyword:
+    case TK::CaseKeyword:
+    case TK::CaseXKeyword:
+    case TK::CaseZKeyword:
+    case TK::ForKeyword:
+    case TK::ForeachKeyword:
+    case TK::WhileKeyword:
+    case TK::RepeatKeyword:
+    case TK::ForeverKeyword:
+    case TK::DoKeyword:
+      return true;
+    default:
+      return false;
+  }
+}
+
 [[nodiscard]] auto requiresTabularAlignment(const Line& line) -> bool {
+  if (isControlHeader(line)) {
+    return false;
+  }
   for (const auto& ft : line.tokens) {
     if (ft.type == TokenType::kPortDirection ||
         ft.type == TokenType::kTypeKeyword) {

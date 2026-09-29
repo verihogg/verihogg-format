@@ -4,6 +4,7 @@
 
 #include <gsl/span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "data/format_style.h"
@@ -15,6 +16,7 @@ struct FormatResult {
   std::vector<FormatWarning> warnings;
 };
 
-auto format(gsl::span<const slang::parsing::Token> tokens, FormatStyle style)
-    -> FormatResult;
+// Pass the exact LexContext::source_text() to enable byte-exact recovery.
+auto format(gsl::span<const slang::parsing::Token> tokens, FormatStyle style,
+            std::string_view original_source) -> FormatResult;
 }  // namespace format

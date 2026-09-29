@@ -18,6 +18,8 @@ namespace format {
 namespace {
 
 inline constexpr size_t kNoParent = std::numeric_limits<size_t>::max();
+inline constexpr size_t kMaxSearchNodes = 20000;
+inline constexpr size_t kMaxTokensForWrapSearch = 512;
 
 struct Shape {
   ColumnNumber base_indent = 0;
@@ -294,6 +296,9 @@ auto enqueueNode(std::vector<SearchNode>& nodes,
   if (line.tokens.empty()) {
     return {};
   }
+  if (line.tokens.size() > kMaxTokensForWrapSearch) {
+    return appendOnlyDecisions(line);
+  }
 
   const Shape shape = Shape::forLine(line, style, initial_column);
 
@@ -309,6 +314,11 @@ auto enqueueNode(std::vector<SearchNode>& nodes,
               next_sequence);
 
   while (!worklist.empty()) {
+    // Deeply nested expressions can create exponentially many distinct wrap
+    // columns. Keep formatting time and memory bounded for those lines.
+    if (nodes.size() >= kMaxSearchNodes) {
+      return appendOnlyDecisions(line);
+    }
     const QueueEntry entry = worklist.top();
     worklist.pop();
 

@@ -52,7 +52,7 @@ auto main(int argc, char** argv) -> int {
     if (files.empty()) {
       LexContext ctx;
       auto tokens = ctx.lex_file("<stdin>");
-      auto result = format::format(tokens, style);
+      auto result = format::format(tokens, style, ctx.source_text());
       for (const auto& warning : result.warnings) {
         printWarning(std::cerr, "<stdin>", warning);
       }

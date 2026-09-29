@@ -4,6 +4,7 @@
 #include <slang/parsing/Token.h>
 
 #include <gsl/span>
+#include <string_view>
 
 #include "data/format_style.h"
 #include "data/format_warning.h"
@@ -19,8 +20,8 @@ struct UnwrapResult {
 class TreeUnwrapper {
  public:
   TreeUnwrapper(gsl::span<const slang::parsing::Token> tokens,
-                const FormatStyle& style)
-      : tokens(tokens), style(style) {}
+                const FormatStyle& style, std::string_view original_source = {})
+      : tokens(tokens), style(style), original_source(original_source) {}
 
   [[nodiscard]] auto unwrap() const
       -> std::vector<UnwrappedLine<slang::parsing::Token>>;
@@ -29,5 +30,6 @@ class TreeUnwrapper {
  private:
   gsl::span<const slang::parsing::Token> tokens;
   std::reference_wrapper<const FormatStyle> style;
+  std::string_view original_source;
 };
 }  // namespace format
