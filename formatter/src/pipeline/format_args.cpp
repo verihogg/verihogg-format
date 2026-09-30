@@ -26,6 +26,9 @@ Formatting options:
   -p, --over_column_limit_penalty <N>  Penalty per character over limit (default: 100)
   -t, --line_terminator <mode>         auto | lf | crlf (default: auto)
   -n, --inplace                        Overwrite source files instead of stdout
+      --check                          Check formatting without rewriting files
+      --cache[=<file>]                 With --check: skip files known to be formatted
+                                       (default file: .verihogg-format-cache)
 )");
 }
 
@@ -55,8 +58,17 @@ FormatArgsBinder::FormatArgsBinder() {
                   "End of line character: auto | lf | crlf (default: auto)")
       ->check(CLI::IsMember({"auto", "lf", "crlf"}));
 
-  app_.add_flag("-n,--inplace", inplace_,
-                "Overwrite the source files instead of outputting to stdout");
+  auto* inplace = app_.add_flag(
+      "-n,--inplace", inplace_,
+      "Overwrite the source files instead of outputting to stdout");
+  auto* check = app_.add_flag("--check", check_,
+                              "Check formatting without rewriting files")
+                    ->excludes(inplace);
+  // A flag rather than an option, so "--cache file.sv" doesn't take a source
+  // file as the cache path; a custom path is given as --cache=<file>.
+  app_.add_flag("--cache{.verihogg-format-cache}", cache_,
+                "With --check: skip files known to be formatted")
+      ->needs(check);
 
   // Positional "files". Tokens not starting with '-' are placed here by
   // CLI11 itself — before attempts to match them with options, so there's
@@ -89,6 +101,12 @@ auto FormatArgsBinder::buildStyle() -> std::pair<FormatStyle, RunConfig> {
   RunConfig run;
   if (inplace_.has_value()) {
     run.inplace = *inplace_;
+  }
+  if (check_.has_value()) {
+    run.check = *check_;
+  }
+  if (cache_.has_value()) {
+    run.cache_file = *cache_;
   }
 
   return {s, run};

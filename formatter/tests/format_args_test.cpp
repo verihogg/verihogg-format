@@ -128,6 +128,43 @@ TEST_F(FormatArgsTest, InplaceFlagSetsRunConfig) {
 }
 
 // ---------------------------------------------------------------------------
+// --check flag
+// ---------------------------------------------------------------------------
+
+TEST_F(FormatArgsTest, CheckFlagSetsRunConfig) {
+  auto [style, run] = buildStyle({"--check"});
+
+  EXPECT_TRUE(run.check);
+  EXPECT_FALSE(run.inplace);
+}
+
+TEST_F(FormatArgsTest, CheckAndInplaceRejectedByParser) {
+  EXPECT_FALSE(parse({"--check", "--inplace"}));
+}
+
+TEST_F(FormatArgsTest, CacheFlagUsesDefaultFile) {
+  auto [style, run] = buildStyle({"--check", "--cache"});
+
+  EXPECT_EQ(run.cache_file.value_or(""), ".verihogg-format-cache");
+}
+
+TEST_F(FormatArgsTest, CacheFlagTakesCustomFile) {
+  auto [style, run] = buildStyle({"--check", "--cache=my.cache"});
+
+  EXPECT_EQ(run.cache_file.value_or(""), "my.cache");
+}
+
+TEST_F(FormatArgsTest, CacheWithoutCheckRejectedByParser) {
+  EXPECT_FALSE(parse({"--cache"}));
+}
+
+TEST_F(FormatArgsTest, NoCacheByDefault) {
+  auto [style, run] = buildStyle({"--check"});
+
+  EXPECT_FALSE(run.cache_file.has_value());
+}
+
+// ---------------------------------------------------------------------------
 // --line_terminator: all three valid values
 // ---------------------------------------------------------------------------
 
