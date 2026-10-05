@@ -12,6 +12,8 @@
 namespace format {
 
 struct UnwrapResult {
+  // Includes a final, separate EOF partition when the input has an EOF token.
+  // Its trivia carries comments and whitespace after the last statement.
   std::vector<UnwrappedLine<slang::parsing::Token>> lines;
   std::vector<FormatWarning> warnings;
 };
