@@ -46,6 +46,7 @@
             pname = "verihogg-format";
             version = "0.1.0";
             src = ./.;
+            doCheck = true;
 
             meta = {
               description = "SystemVerilog formatter powered by Slang";
