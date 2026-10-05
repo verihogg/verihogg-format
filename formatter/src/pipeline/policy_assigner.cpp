@@ -66,13 +66,11 @@ using Line = PolicyAssigner::Line;
     if (ft.nesting_level != 0) {
       continue;
     }
-    // Everything after return is an expression, including casts with signed
-    // or packed types. Type keywords there cannot start a declaration.
+    // Type keywords in a return expression cannot start a declaration.
     if (ft.token.kind == TK::ReturnKeyword) {
       return false;
     }
-    // A type followed by an apostrophe is a cast, not a declaration:
-    // void'(f()); and return int'(x); are ordinary statement bodies.
+    // A statement such as void'(f()); must not get declaration alignment.
     if (ft.type == TokenType::kTypeKeyword && i + 1 < line.tokens.size() &&
         line.tokens.at(i + 1).token.kind == TK::Apostrophe) {
       continue;

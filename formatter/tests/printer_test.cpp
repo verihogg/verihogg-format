@@ -138,6 +138,21 @@ TEST_F(PrinterTest, RemovesLeadingBlankLinesConsistently) {
   EXPECT_EQ(formatText(once), once) << "Input: " << source;
 }
 
+TEST_F(PrinterTest, RemovesTrailingBlankLines) {
+  EXPECT_EQ(formatText("module m;\n  logic a;\nendmodule\n\n\n"),
+            "module m;\n  logic a;\nendmodule\n");
+}
+
+TEST_F(PrinterTest, PreservesBlankLineBeforeFinalComment) {
+  EXPECT_EQ(formatText("module m; endmodule\n\n// footer\n\n\n"),
+            "module m;\nendmodule\n\n// footer\n");
+}
+
+TEST_F(PrinterTest, RemovesBlankLinesAfterFinalBlockComment) {
+  EXPECT_EQ(formatText("module m; endmodule /* footer */\n\n\n"),
+            "module m;\nendmodule /* footer */\n");
+}
+
 TEST_F(PrinterTest, PreservesCommentAfterLastToken) {
   EXPECT_EQ(formatText("module m; endmodule // last comment"),
             "module m;\nendmodule // last comment\n");

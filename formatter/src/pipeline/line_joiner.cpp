@@ -229,8 +229,7 @@ auto LineJoiner::join(std::vector<Line>& lines) const -> void {
     size_t end = i + 1;
     const auto isBody = [&](size_t index) {
       const auto& body = lines.at(index);
-      return body.nesting_level > anchor.nesting_level &&
-             body.nesting_level - anchor.nesting_level == 1 &&
+      return body.nesting_level - anchor.nesting_level == 1 &&
              isSimpleBody(body) && !hasTrailingComment(lines, index);
     };
     if (kind != HeaderKind::kNone && canFlatten(anchor, true) &&

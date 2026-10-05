@@ -592,9 +592,9 @@ TEST_F(LineJoinerTest, JoinsReturnWithQualifiedTypeCast) {
             "if (a) return int signed'(x);\n");
 }
 
-TEST_F(LineJoinerTest, JoinsReturnWithPackedTypeCast) {
+TEST_F(LineJoinerTest, JoinsBodyContainingPackedTypeCast) {
   const auto style = format::FormatStyle::defaults();
-  auto lines = annotated("if (a) return logic [3:0]'(x);", style);
+  auto lines = annotated("if (a) f(type(logic [3:0])'(x));", style);
   ASSERT_EQ(lines.size(), 3);
   format::LineJoiner(style).join(lines);
   ASSERT_EQ(lines.size(), 2);
