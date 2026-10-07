@@ -1,5 +1,6 @@
 #include "cli/format_args.h"
 
+#include <fmt/format.h>
 #include <slang/driver/Driver.h>
 
 #include <utility>
