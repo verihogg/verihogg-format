@@ -1,5 +1,6 @@
 #include "pipeline/runner.h"
 
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <gsl/span>
@@ -23,6 +24,8 @@ auto writeFile(const std::filesystem::path& path, std::string_view content)
   f << content;
 }
 
+}  // namespace
+
 auto printWarning(std::ostream& os, std::string_view path,
                   const FormatWarning& warning) -> void {
   os << "Warning";
@@ -32,12 +35,12 @@ auto printWarning(std::ostream& os, std::string_view path,
   os << ": " << warning.message << " [" << warning.code << "]\n";
 }
 
-}  // namespace
 auto runFormatter(gsl::span<const std::filesystem::path> files,
-                  const format::FormatStyle& style,
-                  const format::RunConfig& run, Streams streams) -> int {
+                  gsl::span<const FormatStyle> styles, const RunConfig& run,
+                  Streams streams) -> int {
   int warnings = 0;
-  for (const auto& path : files) {
+  for (size_t i = 0; i < files.size(); ++i) {
+    const auto& path = files[i];
     LexContext ctx;
     auto tokens = ctx.lex_file(path);
     if (tokens.empty()) {
@@ -46,7 +49,7 @@ auto runFormatter(gsl::span<const std::filesystem::path> files,
       continue;
     }
 
-    auto result = format::format(tokens, style);
+    auto result = format::format(tokens, styles[i]);
     for (const auto& warning : result.warnings) {
       printWarning(*streams.err, path.string(), warning);
       ++warnings;

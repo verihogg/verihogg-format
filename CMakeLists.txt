@@ -20,17 +20,54 @@ find_package(Microsoft.GSL CONFIG REQUIRED)
 
 find_package(CLI11 CONFIG REQUIRED)
 
+find_package(yaml-cpp CONFIG REQUIRED)
+find_package(valijson CONFIG REQUIRED)
+
+# Embed the configuration JSON schema into the binary so that runtime
+# validation does not depend on files installed alongside the executable.
+# The generated translation unit is self-contained: sources that IDE tooling
+# parses never include files from the build tree.
+set(VHG_SCHEMA_FILE
+  ${CMAKE_CURRENT_SOURCE_DIR}/schemas/verihogg-format.schema.json)
+set(VHG_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
+file(MAKE_DIRECTORY ${VHG_GENERATED_DIR}/config)
+file(READ ${VHG_SCHEMA_FILE} VHG_SCHEMA_JSON)
+file(WRITE ${VHG_GENERATED_DIR}/config/schema_embedded.cpp
+"#include \"config/schema_embedded.h\"
+
+namespace format::config {
+
+auto embeddedSchemaJson() -> std::string_view {
+  return
+R\"VHG(
+${VHG_SCHEMA_JSON}
+)VHG\";
+}
+
+}  // namespace format::config
+")
+file(REMOVE ${VHG_GENERATED_DIR}/config/schema_embedded.inc)
+set(VHG_GENERATED_SOURCE ${VHG_GENERATED_DIR}/config/schema_embedded.cpp)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+  ${VHG_SCHEMA_FILE})
+
+if(TARGET ValiJSON::valijson)
+  set(VHG_VALIJSON_TARGET ValiJSON::valijson)
+else()
+  set(VHG_VALIJSON_TARGET valijson)
+endif()
+
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-add_executable(${PROJECT_NAME} ${SRC})
+add_executable(${PROJECT_NAME} ${SRC} ${VHG_GENERATED_SOURCE})
 
 target_include_directories(${PROJECT_NAME}
   PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/formatter/include>
 )
-target_link_libraries(${PROJECT_NAME} PRIVATE slang::slang Microsoft.GSL::GSL CLI11::CLI11)
+target_link_libraries(${PROJECT_NAME} PRIVATE slang::slang Microsoft.GSL::GSL CLI11::CLI11 yaml-cpp::yaml-cpp ${VHG_VALIJSON_TARGET})
 
 if(MSVC)
   target_compile_options(${PROJECT_NAME} PRIVATE /W4 /bigobj)
@@ -64,10 +101,11 @@ if(GTest_FOUND)
   file(GLOB_RECURSE LIB_SRC CONFIGURE_DEPENDS formatter/src/**.cpp)
   list(FILTER LIB_SRC EXCLUDE REGEX ".*/main\\.cpp$")
 
-  add_library(verihogg-format-lib STATIC ${LIB_SRC})
+  add_library(verihogg-format-lib STATIC ${LIB_SRC} ${VHG_GENERATED_SOURCE})
   target_include_directories(verihogg-format-lib PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/formatter/include>)
   target_link_libraries(verihogg-format-lib PUBLIC slang::slang CLI11::CLI11)
+  target_link_libraries(verihogg-format-lib PRIVATE yaml-cpp::yaml-cpp ${VHG_VALIJSON_TARGET})
 
   file(GLOB_RECURSE TEST_SRC CONFIGURE_DEPENDS formatter/tests/*.cpp)
 

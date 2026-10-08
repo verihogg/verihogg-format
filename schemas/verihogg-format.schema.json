@@ -1,0 +1,326 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Verihogg SystemVerilog Formatter Configuration",
+  "description": "Configuration for the Verihogg SystemVerilog formatter.",
+  "type": "object",
+  "additionalProperties": false,
+
+  "required": [
+    "version"
+  ],
+
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "format": "uri",
+      "description": "Optional reference to this configuration schema, for editor tooling."
+    },
+
+    "version": {
+      "type": "string",
+      "description": "Version of the configuration format.",
+      "enum": [
+        "1.0"
+      ]
+    },
+
+    "style": {
+      "type": "string",
+      "description": "Named formatting profile.",
+      "enum": [
+        "default",
+        "lowrisc",
+        "scr1"
+      ],
+      "default": "default"
+    },
+
+    "column_limit": {
+      "type": "integer",
+      "description": "Target maximum line length.",
+      "minimum": 1,
+      "default": 100
+    },
+
+    "indentation_spaces": {
+      "type": "integer",
+      "description": "Number of spaces per indentation level.",
+      "minimum": 0,
+      "default": 2
+    },
+
+    "wrap_spaces": {
+      "type": "integer",
+      "description": "Additional indentation for continuation lines.",
+      "minimum": 0,
+      "default": 4
+    },
+
+    "line_terminator": {
+      "type": "string",
+      "description": "Line ending used by the formatter.",
+      "enum": [
+        "auto",
+        "lf",
+        "crlf"
+      ],
+      "default": "auto"
+    },
+
+    "line_break_penalty": {
+      "type": "integer",
+      "description": "Penalty for introducing an additional line break during layout optimization.",
+      "minimum": 0,
+      "default": 2
+    },
+
+    "over_column_limit_penalty": {
+      "type": "integer",
+      "description": "Penalty for exceeding the configured column limit.",
+      "minimum": 0,
+      "default": 100
+    },
+
+    "port_declarations_alignment": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/alignmentPolicy"
+        }
+      ],
+      "description": "Alignment of port direction, type, dimensions and name.",
+      "default": "infer"
+    },
+
+    "module_net_variable_alignment": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/alignmentPolicy"
+        }
+      ],
+      "description": "Alignment of net and variable declarations inside blocks.",
+      "default": "infer"
+    },
+
+    "assignment_statement_alignment": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/alignmentPolicy"
+        }
+      ],
+      "description": "Alignment of assignment statements.",
+      "default": "infer"
+    },
+
+    "formal_parameters_alignment": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/alignmentPolicy"
+        }
+      ],
+      "description": "Alignment of formal parameters in module, interface and class headers.",
+      "default": "infer"
+    },
+
+    "named_parameter_alignment": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/alignmentPolicy"
+        }
+      ],
+      "description": "Alignment of named parameters in instantiations.",
+      "default": "infer"
+    },
+
+    "named_port_alignment": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/alignmentPolicy"
+        }
+      ],
+      "description": "Alignment of named port connections.",
+      "default": "infer"
+    },
+
+    "parameter_declaration_alignment": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/alignmentPolicy"
+        }
+      ],
+      "description": "Alignment of parameter and localparam declarations in block bodies.",
+      "default": "infer"
+    },
+
+    "case_items_alignment": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/alignmentPolicy"
+        }
+      ],
+      "description": "Alignment of case item labels.",
+      "default": "infer"
+    },
+
+    "enum_assignment_statement_alignment": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/alignmentPolicy"
+        }
+      ],
+      "description": "Alignment of enum elements with assignments.",
+      "default": "infer"
+    },
+
+    "struct_union_members_alignment": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/alignmentPolicy"
+        }
+      ],
+      "description": "Alignment of struct and union members.",
+      "default": "infer"
+    },
+
+    "class_member_variable_alignment": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/alignmentPolicy"
+        }
+      ],
+      "description": "Alignment of class member variables.",
+      "default": "infer"
+    },
+
+    "distribution_items_alignment": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/alignmentPolicy"
+        }
+      ],
+      "description": "Alignment of distribution items.",
+      "default": "infer"
+    },
+
+    "port_declarations_indentation": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/indentationPolicy"
+        }
+      ],
+      "description": "Indentation of ports in a module or interface header.",
+      "default": "wrap"
+    },
+
+    "formal_parameters_indentation": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/indentationPolicy"
+        }
+      ],
+      "description": "Indentation of formal parameters in a header.",
+      "default": "wrap"
+    },
+
+    "named_parameter_indentation": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/indentationPolicy"
+        }
+      ],
+      "description": "Indentation of named parameters in an instantiation.",
+      "default": "wrap"
+    },
+
+    "named_port_indentation": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/indentationPolicy"
+        }
+      ],
+      "description": "Indentation of named ports in an instantiation.",
+      "default": "wrap"
+    },
+
+    "alignment_group_boundary": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/alignmentGroupBoundary"
+        }
+      ],
+      "description": "Rule determining where an alignment group ends.",
+      "default": "none"
+    },
+
+    "port_declarations_right_align_packed_dimensions": {
+      "type": "boolean",
+      "description": "Right-align packed dimensions in port declarations.",
+      "default": false
+    },
+
+    "port_declarations_right_align_unpacked_dimensions": {
+      "type": "boolean",
+      "description": "Right-align unpacked dimensions in port declarations.",
+      "default": false
+    },
+
+    "compact_indexing_and_selections": {
+      "type": "boolean",
+      "description": "Use compact expressions inside indexes and selections.",
+      "default": true
+    },
+
+    "class_parameter_space": {
+      "type": "boolean",
+      "description": "Insert a space before # in parameterized class typedefs.",
+      "default": false
+    },
+
+    "expand_coverpoints": {
+      "type": "boolean",
+      "description": "Always expand coverpoints.",
+      "default": false
+    },
+
+    "try_wrap_long_lines": {
+      "type": "boolean",
+      "description": "Allow optimization-based wrapping of long lines.",
+      "default": false
+    },
+
+    "wrap_end_else_clauses": {
+      "type": "boolean",
+      "description": "Place end and else clauses on separate lines.",
+      "default": false
+    }
+  },
+
+  "definitions": {
+    "alignmentPolicy": {
+      "type": "string",
+      "enum": [
+        "align",
+        "flush-left",
+        "preserve",
+        "infer"
+      ]
+    },
+
+    "indentationPolicy": {
+      "type": "string",
+      "enum": [
+        "indent",
+        "wrap"
+      ]
+    },
+
+    "alignmentGroupBoundary": {
+      "type": "string",
+      "enum": [
+        "none",
+        "blank-lines",
+        "separator-comments",
+        "blank-lines-and-separator-comments"
+      ]
+    }
+  }
+}

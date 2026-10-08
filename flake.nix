@@ -67,6 +67,8 @@
                 sv-lang
                 microsoft-gsl
                 cli11
+                yaml-cpp
+                valijson
               ]
               ++ sv-lang.buildInputs;
 
