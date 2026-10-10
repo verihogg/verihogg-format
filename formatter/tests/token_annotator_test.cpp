@@ -101,7 +101,7 @@ TEST_F(TokenAnnotatorTest, UnhandledTokenBecomesOpaqueWithWarning) {
   EXPECT_EQ(result.warnings.front().code, "invalid-annotation");
   EXPECT_NE(result.warnings.front().message.find("unsupported token kind"),
             std::string::npos);
-  ASSERT_EQ(result.lines.size(), 4U);
+  ASSERT_EQ(result.lines.size(), 5U);
   EXPECT_TRUE(result.lines.at(1).is_opaque);
   EXPECT_EQ(result.lines.at(1).raw_text,
             "\n  assign y  = a inside {1, 2}; // unsupported\n");
@@ -109,6 +109,8 @@ TEST_F(TokenAnnotatorTest, UnhandledTokenBecomesOpaqueWithWarning) {
   for (const auto& token : result.lines.at(2).tokens) {
     EXPECT_NE(token.type, format::TokenType::kUnknown);
   }
+  EXPECT_EQ(result.lines.back().tokens.front().token.kind,
+            slang::parsing::TokenKind::EndOfFile);
 }
 
 TEST_F(TokenAnnotatorTest, RecognizedGenericTokensAreNotUnknown) {

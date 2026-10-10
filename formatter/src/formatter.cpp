@@ -15,7 +15,6 @@
 #include "pipeline/line_wrap_searcher.h"
 #include "pipeline/policy_assigner.h"
 #include "pipeline/printer.h"
-#include "pipeline/source_preserver.h"
 #include "pipeline/tabular_aligner.h"
 #include "pipeline/token_annotator.h"
 #include "pipeline/token_normalizer.h"
@@ -31,8 +30,6 @@ auto format(gsl::span<const slang::parsing::Token> tokens, FormatStyle style,
                        .unwrapWithDiagnostics();
   auto annotated = TokenAnnotator(style).annotateWithDiagnostics(
       unwrapped.lines, original_source);
-  preserveEofComment(tokens, original_source, annotated.lines);
-
   PolicyAssigner(style).assign(annotated.lines);
   LineJoiner(style).join(annotated.lines);
   align(annotated.lines, style);
@@ -43,10 +40,8 @@ auto format(gsl::span<const slang::parsing::Token> tokens, FormatStyle style,
   unwrapped.warnings.insert(unwrapped.warnings.end(),
                             std::make_move_iterator(annotated.warnings.begin()),
                             std::make_move_iterator(annotated.warnings.end()));
-  return preserveMacroSemantics(
-      tokens, original_source,
-      FormatResult{.formatted_text = output.str(),
-                   .warnings = std::move(unwrapped.warnings)});
+  return FormatResult{.formatted_text = output.str(),
+                      .warnings = std::move(unwrapped.warnings)};
 }
 
 }  // namespace format

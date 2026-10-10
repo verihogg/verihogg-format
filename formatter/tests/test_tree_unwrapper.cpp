@@ -58,6 +58,10 @@ auto snap(const std::vector<Line>& lines) -> std::vector<LineSnap> {
   std::vector<LineSnap> result;
   result.reserve(lines.size());
   for (const auto& l : lines) {
+    // These snapshots describe source constructs; EOF is tested separately.
+    if (l.tokens.size() == 1 && l.tokens.front().kind == TK::EndOfFile) {
+      continue;
+    }
     result.push_back(snap(l));
   }
   return result;
@@ -1255,6 +1259,41 @@ TEST_F(TreeUnwrapperTest, UnsupportedCovergroupPreservesBodyAndResumes) {
   }
   EXPECT_EQ(opaque_count, 1U);
   EXPECT_TRUE(resumed);
+}
+
+TEST_F(TreeUnwrapperTest, AdjacentOpaqueRangesDoNotOverlap) {
+  auto result = parseWithDiagnostics(
+      "module m;\n"
+      "  covergroup cg1;\n"
+      "  endgroup\n"
+      "\n"
+      "  covergroup cg2;\n"
+      "  endgroup\n"
+      "endmodule\n");
+
+  std::vector<std::string> opaque_text;
+  for (const auto& line : result.lines) {
+    if (line.is_opaque) {
+      opaque_text.push_back(line.raw_text);
+    }
+  }
+  EXPECT_EQ(opaque_text, (std::vector<std::string>{
+                             "\n  covergroup cg1;\n  endgroup\n\n",
+                             "  covergroup cg2;\n  endgroup\n",
+                         }));
+}
+
+TEST_F(TreeUnwrapperTest, AppendsEofWithTrailingCommentTrivia) {
+  const auto lines = parse("module m;\nendmodule // tail");
+  ASSERT_FALSE(lines.empty());
+  const auto& eof_line = lines.back();
+  ASSERT_EQ(eof_line.tokens.size(), 1U);
+  EXPECT_EQ(eof_line.tokens.front().kind, TK::EndOfFile);
+  bool has_comment = false;
+  for (const auto& trivia : eof_line.tokens.front().trivia()) {
+    has_comment |= trivia.kind == slang::parsing::TriviaKind::LineComment;
+  }
+  EXPECT_TRUE(has_comment);
 }
 
 TEST_F(TreeUnwrapperTest, NestedOpaqueBlocksResumeAfterOuterClose) {

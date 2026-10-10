@@ -39,6 +39,14 @@ class PrintState {
 
   auto appendRaw(std::string_view text) -> void { current_.append(text); }
 
+  auto appendToLastLine(std::string_view text) -> void {
+    if (lines_.empty()) {
+      current_.append(text);
+    } else {
+      lines_.back().text.append(text);
+    }
+  }
+
   auto appendToken(std::string_view text) -> void {
     current_.append(text);
     current_has_code_ = true;
@@ -98,8 +106,8 @@ class PrintState {
     finishLine();
   }
 
-  auto appendCommentToLastLine(std::string_view text, size_t spaces_before)
-      -> void {
+  auto appendCommentToLastLine(std::string_view text,
+                               size_t spaces_before) -> void {
     if (lines_.empty()) {
       return;
     }
@@ -173,9 +181,8 @@ class PrintState {
     appendSpacesBeforeComment(current_, spaces_before);
   }
 
-  static auto appendSpacesBeforeComment(std::string& text,
-                                        std::string_view spaces_before)
-      -> void {
+  static auto appendSpacesBeforeComment(
+      std::string& text, std::string_view spaces_before) -> void {
     text.append(spaces_before);
   }
 
@@ -290,10 +297,15 @@ struct Indent {
     }
 
     if (!seen_newline) {
-      effect.inline_comments.push_back(TriviaEffect::InlineComment{
-          .spaces_before = std::move(pending_whitespace),
-          .text = text,
-      });
+      if (token.kind == slang::parsing::TokenKind::EndOfFile) {
+        state.appendToLastLine(pending_whitespace);
+        state.appendToLastLine(text);
+      } else {
+        effect.inline_comments.push_back(TriviaEffect::InlineComment{
+            .spaces_before = std::move(pending_whitespace),
+            .text = text,
+        });
+      }
       pending_whitespace.clear();
     } else {
       preserveBlankLines(newline_count, state);
@@ -311,6 +323,32 @@ struct Indent {
 auto printLine(const UnwrappedLine<FormatToken>& line, PrintState& state,
                bool skip_first_trivia) -> void {
   if (line.tokens.empty()) {
+    return;
+  }
+
+  if (line.tokens.size() == 1 &&
+      line.tokens.front().token.kind == slang::parsing::TokenKind::EndOfFile) {
+    if (skip_first_trivia) {
+      return;
+    }
+    const Token& eof = line.tokens.front().token;
+    static_cast<void>(emitLeadingTrivia(eof, Indent{0, 0}, state));
+    state.finishLineIfNeeded();
+    size_t last_comment = eof.trivia().size();
+    for (size_t i = 0; i < eof.trivia().size(); ++i) {
+      const Trivia& item = eof.trivia()[i];
+      if (item.kind == TriviaKind::LineComment ||
+          item.kind == TriviaKind::BlockComment) {
+        last_comment = i;
+      }
+    }
+    if (last_comment != eof.trivia().size()) {
+      std::string trailing_whitespace;
+      for (size_t i = last_comment + 1; i < eof.trivia().size(); ++i) {
+        trailing_whitespace.append(eof.trivia()[i].getRawText());
+      }
+      state.appendOpaque(trailing_whitespace);
+    }
     return;
   }
 

@@ -67,6 +67,12 @@ class SVParser {
 
   auto parse() -> UnwrapResult {
     parseLevel(TK::EndOfFile);
+    addLine();
+    if (!tokens_.empty() && tokens_.back().kind == TK::EndOfFile) {
+      Line eof_line;
+      eof_line.tokens.push_back(tokens_.back());
+      lines_.push_back(std::move(eof_line));
+    }
     return {
         .lines = std::move(lines_),
         .warnings = std::move(warnings_),
@@ -92,6 +98,7 @@ class SVParser {
     ParserState state;
     std::vector<Line> lines;
     std::vector<FormatWarning> warnings;
+    size_t preserved_source_end = 0;
   };
 
   gsl::span<const Token> tokens_;
@@ -101,6 +108,7 @@ class SVParser {
   Line line_;
   std::vector<Line> lines_;
   std::vector<FormatWarning> warnings_;
+  size_t preserved_source_end_ = 0;
   size_t indent_level_ = 0;
   std::vector<BlockFrame> block_stack_;
   bool stop_at_conditional_boundary_ = false;
@@ -408,8 +416,8 @@ class SVParser {
 
   // Skip an unsupported block using the same delimiter table as the normal
   // parser. Inner blocks cannot terminate the outer unsupported block.
-  [[nodiscard]] auto findPairedEnd(size_t start, TK close) const
-      -> std::optional<size_t> {
+  [[nodiscard]] auto findPairedEnd(size_t start,
+                                   TK close) const -> std::optional<size_t> {
     std::vector<TK> expected{close};
     for (size_t i = start + 1;
          i < tokens_.size() && tokens_[i].kind != TK::EndOfFile; ++i) {
@@ -463,36 +471,34 @@ class SVParser {
     return tokens_.size() - 1;
   }
 
+  auto appendOpaqueRange(size_t begin, size_t end) -> void {
+    begin = std::max(std::min(begin, source_.size()), preserved_source_end_);
+    end = std::min(end, source_.size());
+    if (end <= begin) {
+      return;
+    }
+    lines_.push_back(
+        Line{.tokens = {},
+             .raw_text = std::string(source_.substr(begin, end - begin)),
+             .is_opaque = true});
+    preserved_source_end_ = end;
+  }
+
   // Include trivia after the previous formatted token. When resuming on a
   // clean source line, leave that line's indentation to the printer.
   auto emitOpaque(size_t begin, size_t resume) -> void {
     addLine();
-    size_t raw_begin = 0;
-    if (begin > 0) {
-      if (!lines_.empty() && lines_.back().is_opaque) {
-        // The previous opaque span already contains the trivia before this
-        // construct. Do not emit those blank lines a second time.
-        raw_begin = cleanLineStart(begin, begin - 1)
-                        ? sourceLineStart(begin)
-                        : std::min(tokens_[begin].location().offset(),
-                                   source_.size());
-      } else {
-        raw_begin = std::min(tokens_[begin - 1].location().offset() +
-                                 tokens_[begin - 1].rawText().size(),
-                             source_.size());
-      }
-    }
+    const size_t raw_begin =
+        begin == 0 ? 0
+                   : std::min(tokens_[begin - 1].location().offset() +
+                                  tokens_[begin - 1].rawText().size(),
+                              source_.size());
     const size_t raw_end =
         resume == tokens_.size() - 1 ? source_.size()
         : cleanLineStart(resume, begin)
             ? sourceLineStart(resume)
             : std::min(tokens_[resume].location().offset(), source_.size());
-    if (raw_end > raw_begin) {
-      lines_.push_back(Line{.tokens = {},
-                            .raw_text = std::string(
-                                source_.substr(raw_begin, raw_end - raw_begin)),
-                            .is_opaque = true});
-    }
+    appendOpaqueRange(raw_begin, raw_end);
     pos_ = resume;
   }
 
@@ -689,9 +695,8 @@ class SVParser {
     block_stack_ = state.block_stack;
   }
 
-  [[nodiscard]] auto structuralStateCompatible(const ParserState& lhs,
-                                               const ParserState& rhs) const
-      -> bool {
+  [[nodiscard]] auto structuralStateCompatible(
+      const ParserState& lhs, const ParserState& rhs) const -> bool {
     return lhs.indent_level == rhs.indent_level &&
            lhs.block_stack == rhs.block_stack;
   }
@@ -716,6 +721,7 @@ class SVParser {
   [[nodiscard]] auto parseBranch(const ParserState& state) const
       -> BranchResult {
     SVParser branch(tokens_, style_.get(), source_);
+    branch.preserved_source_end_ = preserved_source_end_;
     branch.restoreState(state);
     branch.lines_.clear();
     branch.warnings_.clear();
@@ -725,6 +731,7 @@ class SVParser {
         .state = branch.snapshotState(),
         .lines = std::move(branch.lines_),
         .warnings = std::move(branch.warnings_),
+        .preserved_source_end = branch.preserved_source_end_,
     };
   }
 
@@ -789,6 +796,7 @@ class SVParser {
     warnings_.insert(warnings_.end(),
                      std::make_move_iterator(branch.warnings.begin()),
                      std::make_move_iterator(branch.warnings.end()));
+    preserved_source_end_ = branch.preserved_source_end;
   }
 
   [[nodiscard]] auto matchingOpenFrame(TK kind) const -> bool {
@@ -1061,11 +1069,9 @@ class SVParser {
           std::min(tokens_.back().location().offset(), source_.size());
       const size_t raw_begin =
           start == 0 ? 0
-          : !lines_.empty() && lines_.back().is_opaque
-              ? sourceLineStart(start)
-              : std::min(tokens_[start - 1].location().offset() +
-                             tokens_[start - 1].rawText().size(),
-                         source_end);
+                     : std::min(tokens_[start - 1].location().offset() +
+                                    tokens_[start - 1].rawText().size(),
+                                source_end);
 
       size_t raw_end = std::min(tokens_[start].location().offset(), source_end);
       while (raw_end < source_end) {
@@ -1093,12 +1099,7 @@ class SVParser {
       // The printer skips the next token's leading trivia after an opaque
       // line, so include intervening comments and blank lines here.
       raw_end = at(TK::EndOfFile) ? source_end : sourceLineStart(pos_);
-      lines_.push_back(Line{
-          .tokens = {},
-          .raw_text =
-              std::string(source_.substr(raw_begin, raw_end - raw_begin)),
-          .is_opaque = true,
-      });
+      appendOpaqueRange(raw_begin, raw_end);
       return;
     }
 

@@ -43,25 +43,32 @@ TEST_F(PrinterTest, KeepsWhitespaceAfterEscapedIdentifiers) {
             "endmodule\n");
 }
 
-TEST_F(PrinterTest, KeepsMacroInvocationOnItsOriginalSourceLine) {
+TEST_F(PrinterTest, FormatsMacroInvocationAcrossSourceLines) {
   const std::string source =
       "module m(); initial $display(`__LINE__); endmodule\n";
-  EXPECT_EQ(formatText(source), source);
+  EXPECT_EQ(formatText(source),
+            "module m (\n"
+            ");\n"
+            "  initial $display (`__LINE__);\n"
+            "endmodule\n");
 }
 
-TEST_F(PrinterTest, KeepsUnknownMacroCallOnItsOriginalSourceLine) {
+TEST_F(PrinterTest, FormatsUnknownMacroCallWithoutWarning) {
   const std::string source =
       "module m(); initial $display(`EXTERNAL(1)); endmodule\n";
   LexContext ctx;
   const auto tokens = ctx.lex_string(source);
   const auto result = format::format(tokens, format::FormatStyle::defaults(),
                                      ctx.source_text());
-  EXPECT_EQ(result.formatted_text, source);
-  ASSERT_FALSE(result.warnings.empty());
-  EXPECT_EQ(result.warnings.back().code, "macro-line-number");
+  EXPECT_EQ(result.formatted_text,
+            "module m (\n"
+            ");\n"
+            "  initial $display (`EXTERNAL (1));\n"
+            "endmodule\n");
+  EXPECT_TRUE(result.warnings.empty());
 }
 
-TEST_F(PrinterTest, KeepsStringifiedMacroArgumentText) {
+TEST_F(PrinterTest, FormatsStringifiedMacroInvocation) {
   const std::string source =
       "module m;\n"
       "`define show(expr) $display(`\"expr`\")\n"
@@ -80,14 +87,14 @@ TEST_F(PrinterTest, KeepsStringifiedMacroArgumentText) {
             "`define show(expr) $display(`\"expr`\")\n"
             "  initial\n"
             "    begin\n"
-            "      `show($bits(x));\n"
+            "      `show ($bits (x));\n"
             "    end\n"
             "  logic y;\n"
             "endmodule\n");
   EXPECT_TRUE(result.warnings.empty());
 }
 
-TEST_F(PrinterTest, KeepsArgumentTextOfMacroFromIncludedFile) {
+TEST_F(PrinterTest, FormatsMacroFromIncludedFile) {
   const std::string source =
       "module m;\n"
       "`include \"defs.svh\"\n"
@@ -106,14 +113,14 @@ TEST_F(PrinterTest, KeepsArgumentTextOfMacroFromIncludedFile) {
             "`include \"defs.svh\"\n"
             "  initial\n"
             "    begin\n"
-            "      `SHOW($bits(x));\n"
+            "      `SHOW ($bits (x));\n"
             "    end\n"
             "  logic y;\n"
             "endmodule\n");
   EXPECT_TRUE(result.warnings.empty());
 }
 
-TEST_F(PrinterTest, KeepsNestedMacroCallText) {
+TEST_F(PrinterTest, FormatsNestedMacroCalls) {
   const std::string source =
       "module m;\n"
       "  initial\n"
@@ -124,9 +131,9 @@ TEST_F(PrinterTest, KeepsNestedMacroCallText) {
       "  logic   y ;\n"
       "endmodule\n";
   const auto formatted = formatText(source);
-  EXPECT_NE(formatted.find("`OUTER($bits(x), `INNER(a  + b))"),
+  EXPECT_NE(formatted.find("`OUTER ($bits (x), `INNER (a + b))"),
             std::string::npos);
-  EXPECT_NE(formatted.find("`NEXT(c  + d)"), std::string::npos);
+  EXPECT_NE(formatted.find("`NEXT (c + d)"), std::string::npos);
   EXPECT_NE(formatted.find("  logic y;"), std::string::npos);
 }
 
@@ -399,10 +406,15 @@ TEST_F(PrinterTest, PreservesCommentAfterFinalToken) {
             "module m;\nendmodule // tail\n");
   EXPECT_EQ(formatText("module m;\nendmodule\n/* tail */\n"),
             "module m;\nendmodule\n/* tail */\n");
+  EXPECT_EQ(formatText("module m; endmodule /* first */ // second"),
+            "module m;\nendmodule /* first */ // second");
+  EXPECT_EQ(formatText("module m; endmodule\n// tail\n\n"),
+            "module m;\nendmodule\n// tail\n\n");
 }
 
 TEST_F(PrinterTest, PreservesCommentOnlyFile) {
   EXPECT_EQ(formatText("// only comment\n"), "// only comment\n");
+  EXPECT_EQ(formatText("/* only comment */"), "/* only comment */");
 }
 
 TEST_F(PrinterTest, PreservesWhitespaceAroundInlineBlockComments) {
