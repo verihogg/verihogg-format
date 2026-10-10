@@ -20,6 +20,9 @@ class LexContext {
   auto diagnostics() const -> const slang::Diagnostics& { return diagnostics_; }
 
  private:
+  auto lex_buffer(const slang::SourceBuffer& buffer)
+      -> std::vector<slang::parsing::Token>;
+
   slang::SourceManager source_manager_;
   std::string_view source_text_;
   slang::BumpAllocator alloc_;

@@ -119,12 +119,14 @@ TEST_F(PrinterTest, KeepsNestedMacroCallText) {
       "  initial\n"
       "    begin\n"
       "      `OUTER($bits(x), `INNER(a  + b));\n"
+      "      `NEXT(c  + d);\n"
       "    end\n"
       "  logic   y ;\n"
       "endmodule\n";
   const auto formatted = formatText(source);
   EXPECT_NE(formatted.find("`OUTER($bits(x), `INNER(a  + b))"),
             std::string::npos);
+  EXPECT_NE(formatted.find("`NEXT(c  + d)"), std::string::npos);
   EXPECT_NE(formatted.find("  logic y;"), std::string::npos);
 }
 
@@ -148,6 +150,58 @@ TEST_F(PrinterTest, PreservesUnsupportedBlockAndFormatsAfterIt) {
             "  endgroup\n"
             "  logic b;\n"
             "endmodule\n");
+}
+
+TEST_F(PrinterTest, KeepsBeginAndForkLabelsOnOpeningLine) {
+  const std::string source =
+      "module m;\n"
+      "  always_comb begin : blk\n"
+      "    a = b;\n"
+      "  end\n"
+      "  initial fork : fblk\n"
+      "    a = b;\n"
+      "  join\n"
+      "endmodule\n";
+  const std::string expected =
+      "module m;\n"
+      "  always_comb\n"
+      "    begin : blk\n"
+      "      a = b;\n"
+      "    end\n"
+      "  initial\n"
+      "    fork : fblk\n"
+      "      a = b;\n"
+      "    join\n"
+      "endmodule\n";
+  EXPECT_EQ(formatText(source), expected);
+}
+
+TEST_F(PrinterTest, RepeatedOpaqueBlocksFormatIdempotently) {
+  const std::string source =
+      "module m;\n"
+      "  covergroup cg1;\n"
+      "    x;\n"
+      "  endgroup\n"
+      "\n"
+      "  covergroup cg2;\n"
+      "    y;\n"
+      "  endgroup\n"
+      "  logic   b ;\n"
+      "endmodule\n";
+  const std::string expected =
+      "module m;\n"
+      "  covergroup cg1;\n"
+      "    x;\n"
+      "  endgroup\n"
+      "\n"
+      "  covergroup cg2;\n"
+      "    y;\n"
+      "  endgroup\n"
+      "  logic b;\n"
+      "endmodule\n";
+  const auto formatted = formatText(source);
+  EXPECT_EQ(formatted, expected);
+  EXPECT_EQ(formatText(formatted), formatted);
 }
 
 TEST_F(PrinterTest, FormatsAfterUnknownEnclosingBlock) {

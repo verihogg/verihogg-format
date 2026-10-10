@@ -22,32 +22,24 @@ auto withoutSourceTerminator(std::string_view text) -> std::string_view {
 
 auto LexContext::lex_file(const std::filesystem::path& path)
     -> std::vector<slang::parsing::Token> {
-  std::vector<slang::parsing::Token> tokens;
   source_text_ = {};
 
   auto buffer = source_manager_.readSource(path.string(), /*library=*/nullptr);
   if (!buffer) {
-    return tokens;
+    return {};
   }
-
-  source_text_ = withoutSourceTerminator(buffer->data);
-  slang::parsing::Lexer lexer(*buffer, alloc_, diagnostics_, source_manager_);
-
-  while (true) {
-    auto tok = lexer.lex();
-    tokens.push_back(tok);
-    if (tok.kind == slang::parsing::TokenKind::EndOfFile) {
-      break;
-    }
-  }
-  return tokens;
+  return lex_buffer(*buffer);
 }
 
 auto LexContext::lex_string(std::string_view src)
     -> std::vector<slang::parsing::Token> {
+  return lex_buffer(source_manager_.assignText(src));
+}
+
+auto LexContext::lex_buffer(const slang::SourceBuffer& buffer)
+    -> std::vector<slang::parsing::Token> {
   std::vector<slang::parsing::Token> tokens;
 
-  auto buffer = source_manager_.assignText(src);
   source_text_ = withoutSourceTerminator(buffer.data);
   slang::parsing::Lexer lexer(buffer, alloc_, diagnostics_, source_manager_);
 

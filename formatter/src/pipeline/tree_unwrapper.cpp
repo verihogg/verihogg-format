@@ -467,11 +467,21 @@ class SVParser {
   // clean source line, leave that line's indentation to the printer.
   auto emitOpaque(size_t begin, size_t resume) -> void {
     addLine();
-    const size_t raw_begin =
-        begin == 0 ? 0
-                   : std::min(tokens_[begin - 1].location().offset() +
-                                  tokens_[begin - 1].rawText().size(),
-                              source_.size());
+    size_t raw_begin = 0;
+    if (begin > 0) {
+      if (!lines_.empty() && lines_.back().is_opaque) {
+        // The previous opaque span already contains the trivia before this
+        // construct. Do not emit those blank lines a second time.
+        raw_begin = cleanLineStart(begin, begin - 1)
+                        ? sourceLineStart(begin)
+                        : std::min(tokens_[begin].location().offset(),
+                                   source_.size());
+      } else {
+        raw_begin = std::min(tokens_[begin - 1].location().offset() +
+                                 tokens_[begin - 1].rawText().size(),
+                             source_.size());
+      }
+    }
     const size_t raw_end =
         resume == tokens_.size() - 1 ? source_.size()
         : cleanLineStart(resume, begin)
