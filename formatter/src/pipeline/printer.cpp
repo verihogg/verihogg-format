@@ -27,7 +27,7 @@ struct CompletedLine {
 class PrintState {
  public:
   explicit PrintState(std::string_view line_ending)
-      : line_ending_(line_ending) {}
+      : line_ending_(line_ending), lines_{} {}
 
   auto ensureIndent(size_t indent) -> void {
     if (current_.empty()) {

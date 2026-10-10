@@ -276,3 +276,55 @@ TEST_F(TabularAlignerTest, FormattingIsIdempotent) {
   EXPECT_EQ(first_pass, second_pass)
       << "Formatter output must be stable under a second pass";
 }
+
+// ---------------------------------------------------------------------------
+// Column limit constraint checks
+// ---------------------------------------------------------------------------
+
+TEST_F(TabularAlignerTest, ExceedingColumnLimitPreventsAlignment) {
+  format::FormatStyle style = format::FormatStyle::defaults();
+  constexpr size_t kDefaultColumnLimit = 20;
+  style.column_limit = kDefaultColumnLimit;
+
+  const std::string_view src =
+      "module m ();\n"
+      "logic      very_long_identifier_a;\n"
+      "logic      b;\n"
+      "endmodule";
+
+  const std::string result = formatText(src, style);
+
+  EXPECT_NE(result.find("logic b;"), std::string::npos)
+      << " Alignment should be skipped when exceeding column_limit:\n"
+      << result;
+}
+
+TEST_F(TabularAlignerTest, WithinColumnLimitAppliesAlignment) {
+  constexpr size_t kDefaultColumnLimit = 80;
+
+  format::FormatStyle style = format::FormatStyle::defaults();
+  style.column_limit = kDefaultColumnLimit;
+
+  const std::string_view src =
+      "module m ();\n"
+      "logic      a;\n"
+      "logic      bb;\n"
+      "endmodule";
+
+  const std::string result = formatText(src, style);
+
+  auto col_of = [&](std::string::size_type pos) -> size_t {
+    auto nl = result.rfind('\n', pos);
+    return pos - (nl == std::string::npos ? 0 : nl + 1);
+  };
+
+  auto p_a = result.find(" a;");
+  auto p_bb = result.find(" bb;");
+
+  ASSERT_NE(p_a, std::string::npos);
+  ASSERT_NE(p_bb, std::string::npos);
+
+  EXPECT_EQ(col_of(p_a + 1), col_of(p_bb + 1))
+      << " Alignment should be applied when within column_limit:\n"
+      << result;
+}

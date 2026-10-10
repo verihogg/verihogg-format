@@ -245,7 +245,8 @@ struct AlignmentGroup {
 }
 
 static void apply_group(AlignmentGroup& group,
-                        std::vector<UnwrappedLine<FormatToken>>& lines) {
+                        std::vector<UnwrappedLine<FormatToken>>& lines,
+                        const FormatStyle& style) {
   if (group.line_indices.size() < kMinGroupSize) {
     return;
   }
@@ -265,6 +266,10 @@ static void apply_group(AlignmentGroup& group,
   for (size_t line_i : group.line_indices) {
     const size_t indent = lines.at(line_i).indentation_spaces;
     max_total_width = std::max(max_total_width, indent + formatted_code_width);
+  }
+
+  if (max_total_width > style.column_limit) {
+    return;
   }
 
   const size_t comment_column = max_total_width + kCommentColumnGap;
@@ -320,11 +325,12 @@ static void apply_group(AlignmentGroup& group,
   }
 }
 
-static void process_lines(std::vector<UnwrappedLine<FormatToken>>& lines) {
+static void process_lines(std::vector<UnwrappedLine<FormatToken>>& lines,
+                          const FormatStyle& style) {
   AlignmentGroup current_group;
 
   auto flush = [&]() {
-    apply_group(current_group, lines);
+    apply_group(current_group, lines, style);
     current_group = AlignmentGroup{};
   };
 
@@ -393,8 +399,8 @@ static void process_lines(std::vector<UnwrappedLine<FormatToken>>& lines) {
 }
 
 void align(std::vector<UnwrappedLine<FormatToken>>& lines,
-           const FormatStyle& /*style*/) {
-  process_lines(lines);
+           const FormatStyle& style) {
+  process_lines(lines, style);
 }
 
 }  // namespace format

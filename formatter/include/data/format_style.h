@@ -35,7 +35,7 @@ enum class LineTerminator : uint8_t {
 struct RunConfig {
   bool inplace = false;
   std::string stdin_name = "<stdin>";
-  std::vector<std::string> input_files;
+  std::vector<std::string> input_files{};
 };
 
 namespace defaults {

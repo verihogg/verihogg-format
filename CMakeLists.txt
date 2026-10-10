@@ -18,6 +18,8 @@ file(GLOB_RECURSE SRC CONFIGURE_DEPENDS formatter/src/**.cpp)
 find_package(slang REQUIRED)
 find_package(Microsoft.GSL CONFIG REQUIRED)
 
+find_package(CLI11 CONFIG REQUIRED)
+
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -28,7 +30,7 @@ target_include_directories(${PROJECT_NAME}
   PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/formatter/include>
 )
-target_link_libraries(${PROJECT_NAME} PRIVATE slang::slang Microsoft.GSL::GSL)
+target_link_libraries(${PROJECT_NAME} PRIVATE slang::slang Microsoft.GSL::GSL CLI11::CLI11)
 
 if(MSVC)
   target_compile_options(${PROJECT_NAME} PRIVATE /W4 /bigobj)
@@ -65,13 +67,13 @@ if(GTest_FOUND)
   add_library(verihogg-format-lib STATIC ${LIB_SRC})
   target_include_directories(verihogg-format-lib PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/formatter/include>)
-  target_link_libraries(verihogg-format-lib PUBLIC slang::slang)
+  target_link_libraries(verihogg-format-lib PUBLIC slang::slang CLI11::CLI11)
 
   file(GLOB_RECURSE TEST_SRC CONFIGURE_DEPENDS formatter/tests/*.cpp)
 
   if(TEST_SRC)
     add_executable(verihogg-tests ${TEST_SRC})
-    target_link_libraries(verihogg-tests PRIVATE verihogg-format-lib GTest::gtest GTest::gtest_main)
+    target_link_libraries(verihogg-tests PRIVATE verihogg-format-lib GTest::gtest GTest::gtest_main CLI11::CLI11)
     target_compile_definitions(verihogg-tests PRIVATE SCR1_DIR="${SCR1_PATH}")
     include(GoogleTest)
     gtest_discover_tests(verihogg-tests DISCOVERY_MODE PRE_TEST)

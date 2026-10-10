@@ -22,7 +22,7 @@ enum class PartitionPolicy : uint8_t {
 
 template <typename Token>
 struct UnwrappedLine {
-  std::vector<Token> tokens;
+  std::vector<Token> tokens{};
   std::string raw_text;
   bool is_opaque = false;
 

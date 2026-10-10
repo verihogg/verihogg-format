@@ -25,10 +25,8 @@ auto printWarning(std::ostream& os, std::string_view path,
 
 auto main(int argc, char** argv) -> int {
   try {
-    slang::driver::Driver driver;
-    driver.addStandardArgs();
+    format::FormatArgsBinder binder;
 
-    format::FormatArgsBinder binder(driver);
     auto args = gsl::span(argv, argc);
     for (std::string_view arg : args.subspan(1)) {
       if (arg == "--help" || arg == "-h") {
@@ -37,8 +35,15 @@ auto main(int argc, char** argv) -> int {
       }
     }
 
-    if (!driver.parseCommandLine(argc, argv)) {
-      return 1;
+    try {
+      binder.parse(argc, argv);
+    } catch (const CLI::ParseError& e) {
+      return binder.app().exit(e);
+    }
+
+    slang::driver::Driver driver;
+    for (const auto& file : binder.files()) {
+      driver.sourceLoader.addFiles(file);
     }
 
     auto [style, run] = binder.buildStyle();
