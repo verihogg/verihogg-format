@@ -1041,14 +1041,14 @@ class SVParser {
     }
     if (at(TK::Hash)) {
       consumeInto(line_);
-      consumeBalancedInto(TK::OpenParenthesis, TK::CloseParenthesis, line_);
+      parseParenthesizedListInto(line_);
       while (at(TK::Directive)) {
         addLine();
         parseDirectiveLine();
       }
     }
     consumeInto(line_);  // instance name
-    parsePortListInto(line_);
+    parseParenthesizedListInto(line_);
     if (at(TK::Semicolon)) {
       consumeInto(line_);
     }
@@ -1170,9 +1170,9 @@ class SVParser {
     }
   }
 
-  // Port list `(port, port, ...)` — each comma-separated port becomes a child
-  // UnwrappedLine of the `(` node so the formatter can expand them vertically.
-  auto parsePortListInto(Line& line) -> void {
+  // Each top-level comma-separated item in a parenthesized list gets its own
+  // UnwrappedLine, so parameters and ports can expand vertically.
+  auto parseParenthesizedListInto(Line& line) -> void {
     if (!at(TK::OpenParenthesis)) {
       return;
     }
@@ -1263,7 +1263,7 @@ class SVParser {
       consumeBalancedInto(TK::OpenParenthesis, TK::CloseParenthesis, line_);
     }
     // port list: each port is a child line of the '(' node
-    parsePortListInto(line_);
+    parseParenthesizedListInto(line_);
     if (at(TK::Semicolon)) {
       consumeInto(line_);
     }

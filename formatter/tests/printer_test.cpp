@@ -183,6 +183,38 @@ TEST_F(PrinterTest, KeepsBeginAndForkLabelsOnOpeningLine) {
   EXPECT_EQ(formatText(source), expected);
 }
 
+TEST_F(PrinterTest, KeepsConditionalDirectivesInInstanceParametersOnOwnLines) {
+  const std::string source =
+      "module m;\n"
+      "  child #(.A(1),\n"
+      "`ifdef USE_B\n"
+      "    .B(2),\n"
+      "`else\n"
+      "    .B(3),\n"
+      "`endif\n"
+      "    .C(4)) inst();\n"
+      "endmodule\n";
+
+  const auto formatted = formatText(source);
+  EXPECT_NE(formatted.find("\n`ifdef USE_B\n"), std::string::npos);
+  EXPECT_NE(formatted.find("\n`else\n"), std::string::npos);
+  EXPECT_NE(formatted.find("\n`endif\n"), std::string::npos);
+  EXPECT_EQ(formatText(formatted), formatted);
+}
+
+TEST_F(PrinterTest, SplitsInstanceParametersWithoutDirectives) {
+  const std::string source =
+      "module m;\n"
+      "  child #(.A(1), .B(2)) inst();\n"
+      "endmodule\n";
+
+  const auto formatted = formatText(source);
+  EXPECT_NE(formatted.find("child #(\n"), std::string::npos);
+  EXPECT_NE(formatted.find("\n  .A (1),\n"), std::string::npos);
+  EXPECT_NE(formatted.find("\n  .B (2)\n"), std::string::npos);
+  EXPECT_EQ(formatText(formatted), formatted);
+}
+
 TEST_F(PrinterTest, RepeatedOpaqueBlocksFormatIdempotently) {
   const std::string source =
       "module m;\n"

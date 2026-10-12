@@ -274,7 +274,13 @@ TEST_F(TreeUnwrapperTest, ParameterizedInstantiationIsParsedBeforeFallback) {
             N(TK::Identifier, "child"),
             N(TK::Hash, "#"),
             N(TK::OpenParenthesis, "("),
+        }),
+      L(kIndent, PP::kFitOnLineElseExpand,
+        {
             N(TK::IntegerLiteral, "8"),
+        }),
+      L(kIndent, PP::kFitOnLineElseExpand,
+        {
             N(TK::CloseParenthesis, ")"),
             N(TK::Identifier, "u_child"),
             N(TK::OpenParenthesis, "("),
