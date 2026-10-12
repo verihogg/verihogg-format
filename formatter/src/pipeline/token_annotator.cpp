@@ -816,8 +816,9 @@ struct AnnotationFailure {
   return false;
 }
 
-[[nodiscard]] auto validateLine(const UnwrappedLine<slang::parsing::Token>&
-                                    line) -> std::optional<AnnotationFailure> {
+[[nodiscard]] auto validateLine(
+    const UnwrappedLine<slang::parsing::Token>& line)
+    -> std::optional<AnnotationFailure> {
   std::vector<TK> bracket_stack;
   std::vector<std::pair<size_t, slang::SourceLocation>> questions;
   for (size_t i = 0; i < line.tokens.size(); ++i) {
@@ -881,8 +882,8 @@ struct AnnotationFailure {
 }
 
 [[nodiscard]] auto canResumeAt(const UnwrappedLine<FormatToken>& line,
-                               std::string_view source,
-                               size_t failed_offset) -> bool {
+                               std::string_view source, size_t failed_offset)
+    -> bool {
   if (line.is_opaque || line.tokens.empty()) {
     return false;
   }

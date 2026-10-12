@@ -416,8 +416,8 @@ class SVParser {
 
   // Skip an unsupported block using the same delimiter table as the normal
   // parser. Inner blocks cannot terminate the outer unsupported block.
-  [[nodiscard]] auto findPairedEnd(size_t start,
-                                   TK close) const -> std::optional<size_t> {
+  [[nodiscard]] auto findPairedEnd(size_t start, TK close) const
+      -> std::optional<size_t> {
     std::vector<TK> expected{close};
     for (size_t i = start + 1;
          i < tokens_.size() && tokens_[i].kind != TK::EndOfFile; ++i) {
@@ -695,8 +695,9 @@ class SVParser {
     block_stack_ = state.block_stack;
   }
 
-  [[nodiscard]] auto structuralStateCompatible(
-      const ParserState& lhs, const ParserState& rhs) const -> bool {
+  [[nodiscard]] auto structuralStateCompatible(const ParserState& lhs,
+                                               const ParserState& rhs) const
+      -> bool {
     return lhs.indent_level == rhs.indent_level &&
            lhs.block_stack == rhs.block_stack;
   }

@@ -106,8 +106,8 @@ class PrintState {
     finishLine();
   }
 
-  auto appendCommentToLastLine(std::string_view text,
-                               size_t spaces_before) -> void {
+  auto appendCommentToLastLine(std::string_view text, size_t spaces_before)
+      -> void {
     if (lines_.empty()) {
       return;
     }
@@ -181,8 +181,9 @@ class PrintState {
     appendSpacesBeforeComment(current_, spaces_before);
   }
 
-  static auto appendSpacesBeforeComment(
-      std::string& text, std::string_view spaces_before) -> void {
+  static auto appendSpacesBeforeComment(std::string& text,
+                                        std::string_view spaces_before)
+      -> void {
     text.append(spaces_before);
   }
 
@@ -332,21 +333,21 @@ auto printLine(const UnwrappedLine<FormatToken>& line, PrintState& state,
       return;
     }
     const Token& eof = line.tokens.front().token;
-    static_cast<void>(emitLeadingTrivia(eof, Indent{0, 0}, state));
+    static_cast<void>(emitLeadingTrivia(
+        eof, Indent{.indent = 0, .trailing_comment_spaces = 0}, state));
     state.finishLineIfNeeded();
-    size_t last_comment = eof.trivia().size();
-    for (size_t i = 0; i < eof.trivia().size(); ++i) {
-      const Trivia& item = eof.trivia()[i];
+    bool has_comment = false;
+    std::string trailing_whitespace;
+    for (const Trivia& item : eof.trivia()) {
       if (item.kind == TriviaKind::LineComment ||
           item.kind == TriviaKind::BlockComment) {
-        last_comment = i;
+        has_comment = true;
+        trailing_whitespace.clear();
+      } else if (has_comment) {
+        trailing_whitespace.append(item.getRawText());
       }
     }
-    if (last_comment != eof.trivia().size()) {
-      std::string trailing_whitespace;
-      for (size_t i = last_comment + 1; i < eof.trivia().size(); ++i) {
-        trailing_whitespace.append(eof.trivia()[i].getRawText());
-      }
+    if (has_comment) {
       state.appendOpaque(trailing_whitespace);
     }
     return;
