@@ -33,6 +33,7 @@
 
 - Basic indentation with a fixed number of spaces (configurability is planned)
 - Tabular alignment of port lists and declarations
+- Check mode for CI (`--check`): reports unformatted files without modifying them, checks files in parallel, and can skip unchanged files using a cache (`--cache`)
 - Docker image published to GitHub Container Registry
 - Nix build for reproducible environments
 
@@ -114,10 +115,12 @@ docker run --rm -v "$(pwd)":/data -w /data \
 
 ### Currently implemented
 
-| Option          | Description                                           |
-| --------------- | ----------------------------------------------------- |
-| `-n, --inplace` | Overwrite source files instead of printing to stdout. |
-| `-h, --help`    | Show help and exit.                                   |
+| Option             | Description                                                                                                                         |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `-n, --inplace`    | Overwrite source files instead of printing to stdout. Files whose formatting doesn't change are not rewritten.                      |
+| `--check`          | Check that files are formatted without modifying them; each unformatted file is reported on stderr. Cannot be used with `--inplace`. |
+| `--cache[=FILE]`   | With `--check`: skip files already known to be formatted. The cache is stored in `FILE` (default: `.verihogg-format-cache`).        |
+| `-h, --help`       | Show help and exit.                                                                                                                 |
 
 ### Planned options (not yet implemented)
 
@@ -134,10 +137,10 @@ The following options are part of the roadmap and will be added in future releas
 
 ### Exit codes
 
-| Code | Meaning                                       |
-| ---- | --------------------------------------------- |
-| `0`  | Formatting complete, no errors.               |
-| `1`  | Invalid command-line argument or parse error. |
+| Code | Meaning                                                                                                 |
+| ---- | ------------------------------------------------------------------------------------------------------- |
+| `0`  | Formatting complete, no errors. With `--check`: all files are formatted.                                |
+| `1`  | Invalid command-line argument or parse error. With `--check`: some files need formatting or can't be read. |
 
 ---
 
@@ -180,6 +183,25 @@ docker run --rm -v "$(pwd)":/data -w /data \
   ghcr.io/verihogg/verihogg-format:latest \
   sh -c 'verihogg-format --inplace *.sv'
 ```
+
+#### Checking formatting (CI, pre-commit)
+
+`--check` doesn't modify any files. It prints `Needs formatting: <file>` to stderr for every file that would change and exits with code `1` if there is at least one, so it can be used directly as a CI step. Files are checked in parallel.
+
+```bash
+docker run --rm -v "$(pwd)":/data -w /data \
+  ghcr.io/verihogg/verihogg-format:latest \
+  sh -c 'verihogg-format --check *.sv'
+```
+
+Add `--cache` to skip files that were already found formatted and haven't changed since. This speeds up repeated checks, e.g. in a pre-commit hook:
+
+```bash
+verihogg-format --check --cache *.sv                    # cache in ./.verihogg-format-cache
+verihogg-format --check --cache=.cache/format-cache *.sv # custom cache file
+```
+
+The cache file is created in the current directory by default; add it to your project's `.gitignore`. The cache is discarded automatically when the formatting options change or the formatter binary is rebuilt, so a freshly built formatter always checks every file again.
 
 ---
 

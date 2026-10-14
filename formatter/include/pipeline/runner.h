@@ -12,6 +12,8 @@ struct Streams {
   std::ostream* err;
 };
 
+// Formats files. Returns the number of warnings, or with run.check the number
+// of files that need formatting.
 auto runFormatter(gsl::span<const std::filesystem::path> files,
                   const format::FormatStyle& style,
                   const format::RunConfig& run, Streams streams) -> int;

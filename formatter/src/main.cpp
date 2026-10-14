@@ -53,6 +53,10 @@ auto main(int argc, char** argv) -> int {
     if (run.inplace && files.empty()) {
       std::cerr << "Warning: --inplace has no effect when reading from stdin\n";
     }
+    if (run.check && files.empty()) {
+      std::cerr << "Error: --check requires input files\n";
+      return 1;
+    }
 
     if (files.empty()) {
       LexContext ctx;
@@ -64,8 +68,9 @@ auto main(int argc, char** argv) -> int {
       std::cout << result.formatted_text;
       return 0;
     }
-    runFormatter(files, style, run, {.out = &std::cout, .err = &std::cerr});
-    return 0;
+    const int result =
+        runFormatter(files, style, run, {.out = &std::cout, .err = &std::cerr});
+    return run.check && result > 0 ? 1 : 0;
   } catch (const std::exception& e) {
     std::cerr << "Error: " << e.what() << "\n";
     return 1;

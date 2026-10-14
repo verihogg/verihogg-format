@@ -46,6 +46,8 @@ class FormatArgsBinder {
   std::optional<uint32_t> over_column_limit_penalty_;
   std::optional<std::string> line_terminator_;
   std::optional<bool> inplace_;
+  std::optional<bool> check_;
+  std::optional<std::string> cache_;
 };
 
 }  // namespace format

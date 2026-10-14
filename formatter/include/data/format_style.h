@@ -2,6 +2,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
+#include <optional>
 #include <stdexcept>
 #include <string_view>
 #include <vector>
@@ -34,6 +36,8 @@ enum class LineTerminator : uint8_t {
 
 struct RunConfig {
   bool inplace = false;
+  bool check = false;
+  std::optional<std::filesystem::path> cache_file{};
   std::string stdin_name = "<stdin>";
   std::vector<std::string> input_files{};
 };
