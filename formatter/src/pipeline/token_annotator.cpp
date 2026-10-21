@@ -484,6 +484,7 @@ auto TokenAnnotator::determineTokenTypes(gsl::span<FormatToken> tokens) const
       case TK::ParameterKeyword:
       case TK::LocalParamKeyword:
       case TK::GenVarKeyword:
+      case TK::ReturnKeyword:
         ft.type = TokenType::kGeneric;
         continue;
 

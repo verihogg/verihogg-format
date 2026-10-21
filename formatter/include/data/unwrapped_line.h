@@ -27,6 +27,11 @@ struct UnwrappedLine {
   bool is_opaque = false;
 
   IndentLevel indentation_spaces = 0;
+  // Syntactic nesting survives even when the style prints no indentation.
+  size_t nesting_level = 0;
+  // Parsing recovered without recognizing a complete supported construct.
+  // Layout policies must not erase this provenance.
+  bool is_fallback = false;
   PartitionPolicy partition_policy = PartitionPolicy::kAlwaysExpand;
 
   auto map(std::invocable<Token&&> auto&& func) && -> UnwrappedLine<
@@ -44,6 +49,8 @@ struct UnwrappedLine {
         .raw_text = std::move(this->raw_text),
         .is_opaque = this->is_opaque,
         .indentation_spaces = this->indentation_spaces,
+        .nesting_level = this->nesting_level,
+        .is_fallback = this->is_fallback,
         .partition_policy = this->partition_policy,
     };
   }
@@ -62,6 +69,8 @@ struct UnwrappedLine {
         .raw_text = this->raw_text,
         .is_opaque = this->is_opaque,
         .indentation_spaces = this->indentation_spaces,
+        .nesting_level = this->nesting_level,
+        .is_fallback = this->is_fallback,
         .partition_policy = this->partition_policy,
     };
   }

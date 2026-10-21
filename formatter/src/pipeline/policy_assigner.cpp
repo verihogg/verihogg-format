@@ -38,7 +38,7 @@ using Line = PolicyAssigner::Line;
     return false;
   }
   for (const auto& ft : line.tokens) {
-    if (ft.type == TokenType::kAssignmentOperator) {
+    if (ft.nesting_level == 0 && ft.type == TokenType::kAssignmentOperator) {
       return false;
     }
   }
@@ -85,7 +85,20 @@ using Line = PolicyAssigner::Line;
   if (isControlHeader(line)) {
     return false;
   }
-  for (const auto& ft : line.tokens) {
+  for (size_t i = 0; i < line.tokens.size(); ++i) {
+    const auto& ft = line.tokens.at(i);
+    if (ft.nesting_level != 0) {
+      continue;
+    }
+    // Type keywords in a return expression cannot start a declaration.
+    if (ft.token.kind == TK::ReturnKeyword) {
+      return false;
+    }
+    // A statement such as void'(f()); must not get declaration alignment.
+    if (ft.type == TokenType::kTypeKeyword && i + 1 < line.tokens.size() &&
+        line.tokens.at(i + 1).token.kind == TK::Apostrophe) {
+      continue;
+    }
     if (ft.type == TokenType::kPortDirection ||
         ft.type == TokenType::kTypeKeyword) {
       return true;
@@ -106,6 +119,10 @@ using Line = PolicyAssigner::Line;
 }
 
 [[nodiscard]] auto requiresAssignmentAlignment(const Line& line) -> bool {
+  // In a case expression, <= is a comparison, not a nonblocking assignment.
+  if (isCaseItemLabel(line)) {
+    return false;
+  }
   bool hasAssignment = false;
   bool hasControlKeyword = false;
 
