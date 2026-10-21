@@ -69,6 +69,10 @@ enum class TokenType : uint8_t {
   kEndClassKeyword,
   kGenerateKeyword,
   kEndGenerateKeyword,
+  kPackageKeyword,
+  kEndPackageKeyword,
+  kInterfaceKeyword,
+  kEndInterfaceKeyword,
 
   // Keywords — control flow
   kAlwaysKeyword,
@@ -93,6 +97,8 @@ enum class TokenType : uint8_t {
   kIntegerBase,
   kEdgeKeyword,
   kAssignKeyword,
+  kImportKeyword,
+  kExportKeyword,
   kDirective,
   kTernaryOperator,
   kSvaBinaryOperator,
