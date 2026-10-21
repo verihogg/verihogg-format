@@ -12,7 +12,10 @@
 #include <string_view>
 #include <system_error>
 
+#include "cli/format_args.h"
 #include "data/format_style.h"
+#include "data/lex_context.h"
+#include "formatter.h"
 
 namespace {
 
@@ -346,6 +349,47 @@ TEST_F(ConfigLoaderTest, YmlExtensionIsSupported) {
   ConfigResolver resolver(std::nullopt);
 
   EXPECT_EQ(resolver.resolve(dir() / "root/file.sv").column_limit, 110U);
+}
+
+TEST_F(ConfigLoaderTest, ListIndentationAffectsOutputAndAllowsCliOverride) {
+  const fs::path path = writeFile("cfg.yaml", R"(
+version: "0.1.0"
+indentation_spaces: 3
+wrap_spaces: 7
+port_declarations_indentation: indent
+formal_parameters_indentation: indent
+named_parameter_indentation: indent
+named_port_indentation: indent
+)");
+  FormatStyle style = loadConfigFile(path);
+  const auto formatText = [&style]() {
+    LexContext ctx;
+    const auto tokens = ctx.lex_string(
+        "module m #(parameter WIDTH = 8)(input logic clk);"
+        "child #(.WIDTH(WIDTH)) inst(.clk(clk)); endmodule");
+    const auto result = format::format(tokens, style, ctx.source_text());
+    EXPECT_TRUE(result.warnings.empty());
+    return result.formatted_text;
+  };
+
+  const auto configured = formatText();
+  EXPECT_NE(configured.find("\n   parameter WIDTH"), std::string::npos);
+  EXPECT_NE(configured.find("\n   input logic clk"), std::string::npos);
+  EXPECT_NE(configured.find("\n      .WIDTH"), std::string::npos);
+  EXPECT_NE(configured.find("\n      .clk"), std::string::npos);
+
+  format::FormatArgsBinder binder;
+  std::array<std::string, 3> args = {"formatter", "--named_port_indentation",
+                                     "wrap"};
+  std::array<char*, 3> argv = {args.at(0).data(), args.at(1).data(),
+                               args.at(2).data()};
+  binder.parse(static_cast<int>(argv.size()), argv.data());
+  binder.applyStyleOverrides(style);
+  const auto overridden = formatText();
+  EXPECT_NE(overridden.find("\n          .clk"), std::string::npos);
+  EXPECT_NE(overridden.find("\n      .WIDTH"), std::string::npos);
+  EXPECT_NE(overridden.find("\n   parameter WIDTH"), std::string::npos);
+  EXPECT_NE(overridden.find("\n   input logic clk"), std::string::npos);
 }
 
 TEST_F(ConfigLoaderTest, ResolveForStdinUsesWorkingDirectory) {

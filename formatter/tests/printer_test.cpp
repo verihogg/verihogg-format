@@ -210,8 +210,8 @@ TEST_F(PrinterTest, SplitsInstanceParametersWithoutDirectives) {
 
   const auto formatted = formatText(source);
   EXPECT_NE(formatted.find("child #(\n"), std::string::npos);
-  EXPECT_NE(formatted.find("\n  .A (1),\n"), std::string::npos);
-  EXPECT_NE(formatted.find("\n  .B (2)\n"), std::string::npos);
+  EXPECT_NE(formatted.find("\n      .A (1),\n"), std::string::npos);
+  EXPECT_NE(formatted.find("\n      .B (2)\n"), std::string::npos);
   EXPECT_EQ(formatText(formatted), formatted);
 }
 

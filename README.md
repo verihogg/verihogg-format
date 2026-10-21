@@ -125,11 +125,45 @@ docker run --rm -v "$(pwd)":/data -w /data \
 | `--config PATH`                     | Use this configuration file instead of searching for one.      |
 | `-h, --help`                        | Show help and exit.                                            |
 
-### Reserved style options (not yet implemented)
-
 The basic formatting options in the preceding table are implemented.
 `line_terminator: auto` currently emits LF; detecting line endings from the
 input is not implemented yet.
+
+### List indentation
+
+These options work through both the CLI and the configuration file:
+
+| Option | Applies to |
+| ------ | ---------- |
+| `--port_declarations_indentation MODE` | Port lists in module and interface headers. |
+| `--formal_parameters_indentation MODE` | Formal parameter lists (`#(...)`) in module, interface and class headers. |
+| `--named_parameter_indentation MODE` | Named parameter assignments in instantiations. |
+| `--named_port_indentation MODE` | Named port connections, including `.*`, in instantiations. |
+
+`MODE` is `indent` or `wrap` (default: `wrap`). Each list item gets the enclosing
+block's indentation plus `indentation_spaces` for `indent`, or `wrap_spaces`
+for `wrap`. Closing parentheses stay at the header's indentation. Compiler
+directives inside lists stay in column zero. The named options leave positional
+arguments unchanged.
+
+```yaml
+version: "0.1.0"
+indentation_spaces: 2
+wrap_spaces: 4
+port_declarations_indentation: indent
+formal_parameters_indentation: wrap
+named_parameter_indentation: indent
+named_port_indentation: wrap
+```
+
+With these settings, module ports start two spaces from the left margin and
+formal parameters start four spaces from it. Inside a module body, named
+parameter assignments start at four spaces and named port connections at six.
+
+Default output now includes four spaces of continuation indentation for the
+supported list items, and formal parameter lists expand to one item per line.
+
+### Reserved style options (not yet implemented)
 
 All options in the table below are accepted by the CLI and configuration loader
 and stored in `FormatStyle`, but **have no effect on formatting yet**. In
@@ -153,10 +187,6 @@ the command line overrides the value stored from the configuration file.
 | `--struct_union_members_alignment MODE`      | Alignment of struct and union members.                                                               |
 | `--class_member_variable_alignment MODE`     | Alignment of class member variables.                                                                 |
 | `--distribution_items_alignment MODE`        | Alignment of distribution items.                                                                     |
-| `--port_declarations_indentation MODE`       | Indentation of ports in a module or interface header.                                                |
-| `--formal_parameters_indentation MODE`       | Indentation of formal parameters in a header.                                                        |
-| `--named_parameter_indentation MODE`         | Indentation of named parameters in an instantiation.                                                 |
-| `--named_port_indentation MODE`              | Indentation of named ports in an instantiation.                                                      |
 | `--alignment_group_boundary RULE`            | Rule determining where an alignment group ends.                                                      |
 | `--port_declarations_right_align_packed_dimensions`   | Right-align packed dimensions in port declarations (default: `false`).                      |
 | `--port_declarations_right_align_unpacked_dimensions` | Right-align unpacked dimensions in port declarations (default: `false`).                    |
@@ -168,7 +198,6 @@ the command line overrides the value stored from the configuration file.
 
 For an alignment option `MODE` is one of `align`, `flush-left`, `preserve` or
 `infer` (default: `infer`).
-For an indentation option it is `indent` or `wrap` (default: `wrap`).
 `RULE` is one of `none`, `blank-lines`, `separator-comments`
 or `blank-lines-and-separator-comments` (default: `none`).
 
@@ -213,6 +242,7 @@ are resolved in this order (later wins):
 
 Named style profiles are **not implemented yet**. The `style` key accepts
 `default`, `lowrisc` and `scr1`, but all three currently use the built-in defaults.
+The options in [List indentation](#list-indentation) affect formatter output.
 The reserved options listed above are validated and loaded, but do not affect
 the formatter output.
 

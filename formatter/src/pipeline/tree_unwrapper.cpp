@@ -87,6 +87,13 @@ class SVParser {
     auto operator==(const BlockFrame&) const -> bool = default;
   };
 
+  enum class ListKind : uint8_t {
+    kPortDeclarations,
+    kFormalParameters,
+    kActualParameters,
+    kPortConnections,
+  };
+
   struct ParserState {
     size_t pos = 0;
     Line line;
@@ -133,14 +140,15 @@ class SVParser {
 
   // ---- line management ----
 
-  auto addLine() -> void {
+  auto addLine(size_t continuationIndent = 0) -> void {
     if (line_.tokens.empty()) {
       return;
     }
     line_.indentation_spaces =
         startsWithCompilerDirective(line_)
             ? 0
-            : indent_level_ * style_.get().indentation_spaces;
+            : indent_level_ * style_.get().indentation_spaces +
+                  continuationIndent;
     lines_.push_back(std::move(line_));
     line_ = Line{};
   }
@@ -1042,14 +1050,14 @@ class SVParser {
     }
     if (at(TK::Hash)) {
       consumeInto(line_);
-      parseParenthesizedListInto(line_);
+      parseParenthesizedList(ListKind::kActualParameters);
       while (at(TK::Directive)) {
         addLine();
         parseDirectiveLine();
       }
     }
     consumeInto(line_);  // instance name
-    parseParenthesizedListInto(line_);
+    parseParenthesizedList(ListKind::kPortConnections);
     if (at(TK::Semicolon)) {
       consumeInto(line_);
     }
@@ -1171,13 +1179,44 @@ class SVParser {
     }
   }
 
-  // Each top-level comma-separated item in a parenthesized list gets its own
-  // UnwrappedLine, so parameters and ports can expand vertically.
-  auto parseParenthesizedListInto(Line& line) -> void {
+  [[nodiscard]] auto listItemIndentation(ListKind kind) const -> size_t {
+    if (line_.tokens.empty()) {
+      return 0;
+    }
+    // The named actual options must not change positional arguments.
+    if ((kind == ListKind::kActualParameters ||
+         kind == ListKind::kPortConnections) &&
+        line_.tokens.front().kind != TK::Dot) {
+      return 0;
+    }
+
+    const auto& style = style_.get();
+    IndentationPolicy policy = IndentationPolicy::kWrap;
+    switch (kind) {
+      case ListKind::kPortDeclarations:
+        policy = style.port_declarations_indentation;
+        break;
+      case ListKind::kFormalParameters:
+        policy = style.formal_parameters_indentation;
+        break;
+      case ListKind::kActualParameters:
+        policy = style.named_parameter_indentation;
+        break;
+      case ListKind::kPortConnections:
+        policy = style.named_port_indentation;
+        break;
+    }
+    return policy == IndentationPolicy::kIndent ? style.indentation_spaces
+                                                : style.wrap_spaces;
+  }
+
+  // Each top-level comma-separated item gets its own UnwrappedLine.
+  // Continuation indentation belongs to items, not the surrounding block.
+  auto parseParenthesizedList(ListKind kind) -> void {
     if (!at(TK::OpenParenthesis)) {
       return;
     }
-    line.tokens.push_back(consume());
+    consumeInto(line_);
 
     addLine();
     int parenDepth = 0;
@@ -1194,23 +1233,23 @@ class SVParser {
       }
 
       if (atTopLevel() && isCompilerDirective(peek()) &&
-          (line.tokens.empty() || hasLeadingNewline(peek()))) {
-        addLine();
+          (line_.tokens.empty() || hasLeadingNewline(peek()))) {
+        addLine(listItemIndentation(kind));
 
-        consumeInto(line);
+        consumeInto(line_);
         while (pos_ < tokens_.size() && !at(TK::EndOfFile)) {
           if (hasLeadingNewline(peek())) {
             break;
           }
-          consumeInto(line);
+          consumeInto(line_);
         }
         addLine();
         continue;
       }
 
       if (at(TK::Comma) && atTopLevel()) {
-        consumeInto(line);
-        addLine();
+        consumeInto(line_);
+        addLine(listItemIndentation(kind));
         continue;
       }
 
@@ -1243,28 +1282,31 @@ class SVParser {
         default:
           break;
       }
-      consumeInto(line);
+      consumeInto(line_);
     }
-    addLine();
+    addLine(listItemIndentation(kind));
     if (at(TK::CloseParenthesis)) {
-      line.tokens.push_back(consume());
+      consumeInto(line_);
     }
   }
 
   // module foo #(...) (...); ... endmodule
   auto parseStructuralBlock(TK closeKw) -> void {
     consumeInto(line_);  // module / interface / ...
+    if (at(TK::AutomaticKeyword) || at(TK::StaticKeyword)) {
+      consumeInto(line_);
+    }
     // name
     if (!at(closeKw) && !at(TK::Semicolon) && !at(TK::EndOfFile)) {
       consumeInto(line_);
     }
-    // optional #(param list) — consumed flat for now
+    // optional #(formal parameter list)
     if (at(TK::Hash)) {
       consumeInto(line_);
-      consumeBalancedInto(TK::OpenParenthesis, TK::CloseParenthesis, line_);
+      parseParenthesizedList(ListKind::kFormalParameters);
     }
     // port list: each port is a child line of the '(' node
-    parseParenthesizedListInto(line_);
+    parseParenthesizedList(ListKind::kPortDeclarations);
     if (at(TK::Semicolon)) {
       consumeInto(line_);
     }
@@ -1276,6 +1318,18 @@ class SVParser {
   // class / function / task ... endclass / endfunction / endtask
   auto parseNamedBlock(TK closeKw) -> void {
     consumeInto(line_);  // keyword
+    if (closeKw == TK::EndClassKeyword) {
+      if (at(TK::AutomaticKeyword) || at(TK::StaticKeyword)) {
+        consumeInto(line_);
+      }
+      if (at(TK::Identifier)) {
+        consumeInto(line_);  // class name
+      }
+      if (at(TK::Hash)) {
+        consumeInto(line_);
+        parseParenthesizedList(ListKind::kFormalParameters);
+      }
+    }
     while (!at(TK::Semicolon) && !at(TK::EndOfFile) && !at(closeKw)) {
       if (at(TK::OpenParenthesis)) {
         consumeBalancedInto(TK::OpenParenthesis, TK::CloseParenthesis, line_);

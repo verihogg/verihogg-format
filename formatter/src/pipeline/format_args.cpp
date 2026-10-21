@@ -67,6 +67,13 @@ Formatting options:
       --config <path>                  Load configuration from a YAML file
   -n, --inplace                        Overwrite source files instead of stdout
 
+List indentation options (indent | wrap, default: wrap):
+  indent adds indentation_spaces; wrap adds wrap_spaces to the enclosing block.
+      --port_declarations_indentation
+      --formal_parameters_indentation
+      --named_parameter_indentation
+      --named_port_indentation
+
 The style options below are reserved and do not affect formatting yet.
 Line-wrap search currently always runs, regardless of --try_wrap_long_lines.
 
@@ -83,12 +90,6 @@ Alignment options (align | flush-left | preserve | infer, default: infer):
       --struct_union_members_alignment
       --class_member_variable_alignment
       --distribution_items_alignment
-
-Indentation options (indent | wrap, default: wrap):
-      --port_declarations_indentation
-      --formal_parameters_indentation
-      --named_parameter_indentation
-      --named_port_indentation
 
 Alignment grouping:
       --alignment_group_boundary <rule>  none | blank-lines | separator-comments |

@@ -181,6 +181,11 @@ auto TokenAnnotator::determineTokenTypes(gsl::span<FormatToken> tokens) const
         ft.type = TokenType::kEndModuleKeyword;
         continue;
 
+      case TK::InterfaceKeyword:
+        ft.type = TokenType::kGeneric;
+        next_is_module_name = true;
+        continue;
+
       case TK::FunctionKeyword:
         ft.type = TokenType::kFunctionKeyword;
         continue;
@@ -484,6 +489,11 @@ auto TokenAnnotator::determineTokenTypes(gsl::span<FormatToken> tokens) const
       case TK::ParameterKeyword:
       case TK::LocalParamKeyword:
       case TK::GenVarKeyword:
+      case TK::EndInterfaceKeyword:
+      case TK::StaticKeyword:
+      case TK::AutomaticKeyword:
+      case TK::ExtendsKeyword:
+      case TK::TypeKeyword:
         ft.type = TokenType::kGeneric;
         continue;
 

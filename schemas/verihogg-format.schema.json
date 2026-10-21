@@ -207,7 +207,7 @@
           "$ref": "#/definitions/indentationPolicy"
         }
       ],
-      "description": "Indentation of ports in a module or interface header. Not implemented yet: accepted and stored, but has no effect on formatting.",
+      "description": "Indentation of ports in a module or interface header. Adds indentation_spaces for indent or wrap_spaces for wrap to the enclosing block indentation.",
       "default": "wrap"
     },
 
@@ -217,7 +217,7 @@
           "$ref": "#/definitions/indentationPolicy"
         }
       ],
-      "description": "Indentation of formal parameters in a header. Not implemented yet: accepted and stored, but has no effect on formatting.",
+      "description": "Indentation of formal parameters in module, interface and class headers. Adds indentation_spaces for indent or wrap_spaces for wrap to the enclosing block indentation.",
       "default": "wrap"
     },
 
@@ -227,7 +227,7 @@
           "$ref": "#/definitions/indentationPolicy"
         }
       ],
-      "description": "Indentation of named parameters in an instantiation. Not implemented yet: accepted and stored, but has no effect on formatting.",
+      "description": "Indentation of named parameters in an instantiation. Adds indentation_spaces for indent or wrap_spaces for wrap to the enclosing block indentation.",
       "default": "wrap"
     },
 
@@ -237,7 +237,7 @@
           "$ref": "#/definitions/indentationPolicy"
         }
       ],
-      "description": "Indentation of named ports in an instantiation. Not implemented yet: accepted and stored, but has no effect on formatting.",
+      "description": "Indentation of named ports in an instantiation. Adds indentation_spaces for indent or wrap_spaces for wrap to the enclosing block indentation.",
       "default": "wrap"
     },
 
