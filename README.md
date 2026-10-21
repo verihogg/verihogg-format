@@ -115,6 +115,7 @@ docker run --rm -v "$(pwd)":/data -w /data \
 
 | Option                              | Description                                                    |
 | ----------------------------------- | -------------------------------------------------------------- |
+| `--check`                         | Check formatting without writing files; incompatible with `--inplace`. |
 | `-n, --inplace`                     | Overwrite source files instead of printing to stdout.          |
 | `-c, --column_limit N`              | Maximum line length (default: `100`).                          |
 | `-i, --indentation_spaces N`        | Spaces per indent level (default: `2`).                        |
@@ -183,8 +184,8 @@ formatter --no_compact_indexing_and_selections src/*.sv
 
 | Code | Meaning                                       |
 | ---- | --------------------------------------------- |
-| `0`  | Formatting complete, no errors.               |
-| `1`  | Invalid command-line argument, configuration file error or parse error. |
+| `0`  | Formatting complete, or all checked files match the style.               |
+| `1`  | Error, or a checked file needs formatting or cannot be read. |
 
 ---
 
@@ -234,6 +235,18 @@ column_limit: 120
 ---
 
 ## Usage
+
+Check formatting without changing files:
+
+```bash
+verihogg-format --check file.sv
+```
+
+Check mode requires input files and uses the resolved configuration and CLI
+style overrides for each file. It prints diagnostics to stderr, writes nothing
+to stdout, and exits with 0 when all files match or 1 when a file needs
+formatting or cannot be read. Formatter warnings are also reported. Files are
+checked in parallel; diagnostics follow the input file order.
 
 ### Docker (recommended)
 

@@ -66,6 +66,7 @@ Formatting options:
   -t, --line_terminator <mode>         auto | lf | crlf (default: auto; auto currently emits LF)
       --config <path>                  Load configuration from a YAML file
   -n, --inplace                        Overwrite source files instead of stdout
+      --check                          Check formatting without rewriting files
 
 The style options below are reserved and do not affect formatting yet.
 Line-wrap search currently always runs, regardless of --try_wrap_long_lines.
@@ -133,8 +134,11 @@ FormatArgsBinder::FormatArgsBinder() {
                   "End of line character: auto | lf | crlf (default: auto)")
       ->check(CLI::IsMember({"auto", "lf", "crlf"}));
 
-  app_.add_flag("-n,--inplace", inplace_,
-                "Overwrite the source files instead of outputting to stdout");
+  auto* inplace = app_.add_flag(
+      "-n,--inplace", inplace_,
+      "Overwrite the source files instead of outputting to stdout");
+  app_.add_flag("--check", check_, "Check formatting without rewriting files")
+      ->excludes(inplace);
 
   app_.add_option("--config", config_path_,
                   "Load configuration from a YAML file");
@@ -365,6 +369,9 @@ auto FormatArgsBinder::buildRunConfig() const -> RunConfig {
   RunConfig run;
   if (inplace_.has_value()) {
     run.inplace = *inplace_;
+  }
+  if (check_.has_value()) {
+    run.check = *check_;
   }
   return run;
 }

@@ -120,8 +120,24 @@ TEST_F(FormatArgsTest, CustomOverColumnLimitPenalty) {
 }
 
 // ---------------------------------------------------------------------------
-// --inplace flag
+// --inplace and --check flags
 // ---------------------------------------------------------------------------
+
+TEST_F(FormatArgsTest, CheckFlagSetsRunConfig) {
+  const auto [style, run] = buildStyle({"--check"});
+  EXPECT_TRUE(run.check);
+  EXPECT_FALSE(run.inplace);
+}
+
+TEST_F(FormatArgsTest, CheckIsDisabledByDefault) {
+  const auto [style, run] = buildStyle();
+  EXPECT_FALSE(run.check);
+}
+
+TEST_F(FormatArgsTest, CheckAndInplaceAreMutuallyExclusive) {
+  EXPECT_FALSE(parse({"--check", "--inplace"}));
+  EXPECT_FALSE(parse({"--inplace", "--check"}));
+}
 
 TEST_F(FormatArgsTest, InplaceFlagSetsRunConfig) {
   auto [style, run] = buildStyle({"--inplace"});

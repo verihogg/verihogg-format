@@ -44,6 +44,12 @@ auto main(int argc, char** argv) -> int {
             ? std::optional<std::filesystem::path>{*binder.configPath()}
             : std::nullopt);
     const format::RunConfig run = binder.buildRunConfig();
+    if (run.check && !driver.sourceLoader.getErrors().empty()) {
+      for (const auto& error : driver.sourceLoader.getErrors()) {
+        std::cerr << "Error: " << error << "\n";
+      }
+      return 1;
+    }
 
     auto applyOverrides = [&binder](format::FormatStyle style) {
       binder.applyStyleOverrides(style);
@@ -55,6 +61,11 @@ auto main(int argc, char** argv) -> int {
     };
 
     const auto& files = driver.sourceLoader.getFilePaths();
+
+    if (run.check && files.empty()) {
+      std::cerr << "Error: --check requires input files\n";
+      return 1;
+    }
 
     if (run.inplace && files.empty()) {
       std::cerr << "Warning: --inplace has no effect when reading from stdin\n";
@@ -84,8 +95,9 @@ auto main(int argc, char** argv) -> int {
     for (const auto& file : files) {
       styles.push_back(styleFor(file));
     }
-    runFormatter(files, styles, run, {.out = &std::cout, .err = &std::cerr});
-    return 0;
+    const int result = runFormatter(files, styles, run,
+                                    {.out = &std::cout, .err = &std::cerr});
+    return run.check && result > 0 ? 1 : 0;
   } catch (const std::exception& e) {
     std::cerr << "Error: " << e.what() << "\n";
     return 1;
