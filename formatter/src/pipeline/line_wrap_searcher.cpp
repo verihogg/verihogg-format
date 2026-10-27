@@ -1,5 +1,7 @@
 #include "pipeline/line_wrap_searcher.h"
 
+#include <slang/parsing/Token.h>
+
 #include <algorithm>
 #include <compare>
 #include <cstddef>
@@ -287,6 +289,44 @@ auto enqueueNode(std::vector<SearchNode>& nodes,
   return decisions;
 }
 
+// Avoid choosing optional wraps, but keep the annotator's mandatory breaks.
+// If the resulting layout overflows, retain the input's whitespace instead
+// of flattening a potentially hand-wrapped expression.
+[[nodiscard]] auto unoptimizedDecisions(const UnwrappedLine<FormatToken>& line,
+                                        const Shape& shape,
+                                        const FormatStyle& style)
+    -> std::vector<InterTokenDecision> {
+  auto decisions = appendOnlyDecisions(line);
+  SearchNode current = makeRoot(line, shape);
+  bool overflows = current.current_column > shape.column_limit;
+  for (size_t i = 1; i < line.tokens.size(); ++i) {
+    const auto action =
+        line.tokens.at(i).before.break_decision == BreakDecision::kMustBreak
+            ? TokenAction::kWrap
+            : TokenAction::kAppend;
+    current = makeChild(line, shape, style, current, kNoParent, action);
+    decisions.at(i) = {.spaces_before = current.spaces_before,
+                       .action = action};
+    overflows = overflows || current.current_column > shape.column_limit;
+  }
+
+  if (overflows) {
+    for (size_t i = 1; i < line.tokens.size(); ++i) {
+      const auto& token = line.tokens.at(i);
+      const auto constraint = token.before.break_decision;
+      const bool has_newline = std::ranges::any_of(
+          token.token.trivia(), [](const slang::parsing::Trivia& trivia) {
+            return trivia.kind == slang::parsing::TriviaKind::EndOfLine;
+          });
+      if (constraint != BreakDecision::kMustBreak &&
+          !(constraint == BreakDecision::kMustNotBreak && has_newline)) {
+        decisions.at(i).action = TokenAction::kPreserve;
+      }
+    }
+  }
+  return decisions;
+}
+
 }  // namespace
 
 [[nodiscard]] auto searchLineWraps(const UnwrappedLine<FormatToken>& line,
@@ -296,11 +336,11 @@ auto enqueueNode(std::vector<SearchNode>& nodes,
   if (line.tokens.empty()) {
     return {};
   }
-  if (line.tokens.size() > kMaxTokensForWrapSearch) {
-    return appendOnlyDecisions(line);
-  }
-
   const Shape shape = Shape::forLine(line, style, initial_column);
+  if (!style.try_wrap_long_lines ||
+      line.tokens.size() > kMaxTokensForWrapSearch) {
+    return unoptimizedDecisions(line, shape, style);
+  }
 
   std::vector<SearchNode> nodes;
   nodes.reserve(line.tokens.size() * 2);
@@ -317,7 +357,7 @@ auto enqueueNode(std::vector<SearchNode>& nodes,
     // Deeply nested expressions can create exponentially many distinct wrap
     // columns. Keep formatting time and memory bounded for those lines.
     if (nodes.size() >= kMaxSearchNodes) {
-      return appendOnlyDecisions(line);
+      return unoptimizedDecisions(line, shape, style);
     }
     const QueueEntry entry = worklist.top();
     worklist.pop();
@@ -351,7 +391,7 @@ auto enqueueNode(std::vector<SearchNode>& nodes,
     }
   }
 
-  return appendOnlyDecisions(line);
+  return unoptimizedDecisions(line, shape, style);
 }
 
 auto applyLineWraps(std::vector<UnwrappedLine<FormatToken>>& lines,

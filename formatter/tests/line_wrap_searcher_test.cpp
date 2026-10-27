@@ -4,6 +4,7 @@
 #include <slang/parsing/TokenKind.h>
 
 #include <cstddef>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -49,6 +50,7 @@ class LineWrapSearcherTest : public ::testing::Test {
 
   static auto testStyle() -> format::FormatStyle {
     format::FormatStyle style = format::FormatStyle::defaults();
+    style.try_wrap_long_lines = true;
     style.column_limit = kDefaultTestColumnLimit;
     style.indentation_spaces = 3;
     style.wrap_spaces = kDefaultTestWrapSpaces;
@@ -132,5 +134,86 @@ TEST_F(LineWrapSearcherTest, FindsOptimalWrapsInLongUndecidedSequence) {
     if (should_wrap) {
       EXPECT_EQ(decisions.at(i).spaces_before, 2U);
     }
+  }
+}
+
+TEST_F(LineWrapSearcherTest, DisabledOptimizationFormatsFittingLine) {
+  auto style = testStyle();
+  style.try_wrap_long_lines = false;
+  const auto line = makeLine("aa\n    bb cc", 3);
+
+  const auto decisions = format::searchLineWraps(line, style);
+
+  ASSERT_EQ(decisions.size(), line.tokens.size());
+  for (const auto& decision : decisions) {
+    EXPECT_EQ(decision.action, format::TokenAction::kAppend);
+  }
+  EXPECT_EQ(decisions.at(1).spaces_before, 1U);
+}
+
+TEST_F(LineWrapSearcherTest, DisabledOptimizationPreservesOverflowingLine) {
+  auto style = testStyle();
+  style.try_wrap_long_lines = false;
+  const auto line = makeLine("aaaaaaaa\n   bbbbbbbb  cccccccc", 3);
+
+  const auto decisions = format::searchLineWraps(line, style);
+
+  ASSERT_EQ(decisions.size(), line.tokens.size());
+  EXPECT_EQ(decisions.at(0).action, format::TokenAction::kAppend);
+  EXPECT_EQ(decisions.at(1).action, format::TokenAction::kPreserve);
+  EXPECT_EQ(decisions.at(2).action, format::TokenAction::kPreserve);
+}
+
+TEST_F(LineWrapSearcherTest, DisabledOptimizationRespectsBreakConstraints) {
+  auto style = testStyle();
+  style.try_wrap_long_lines = false;
+  auto line = makeLine("aaaa bbbb\n   ccccccc ddddddd", 3);
+  line.tokens.at(1).before.break_decision = format::BreakDecision::kMustBreak;
+  line.tokens.at(2).before.break_decision =
+      format::BreakDecision::kMustNotBreak;
+
+  const auto decisions = format::searchLineWraps(line, style);
+
+  ASSERT_EQ(decisions.size(), line.tokens.size());
+  EXPECT_EQ(decisions.at(1).action, format::TokenAction::kWrap);
+  EXPECT_EQ(decisions.at(1).spaces_before, 9U);
+  EXPECT_EQ(decisions.at(2).action, format::TokenAction::kAppend);
+  EXPECT_EQ(decisions.at(3).action, format::TokenAction::kPreserve);
+}
+
+TEST_F(LineWrapSearcherTest, TokenLimitFallbackRespectsMandatoryBreaks) {
+  constexpr size_t kTokenCount = 600;
+  std::string source;
+  for (size_t i = 0; i < kTokenCount; ++i) {
+    source += "word ";
+  }
+  auto line = makeLine(source, 3);
+  line.tokens.at(1).before.break_decision = format::BreakDecision::kMustBreak;
+
+  const auto decisions = format::searchLineWraps(line, testStyle());
+
+  ASSERT_EQ(decisions.size(), kTokenCount);
+  EXPECT_EQ(decisions.at(1).action, format::TokenAction::kWrap);
+  EXPECT_EQ(decisions.at(1).spaces_before, 9U);
+  EXPECT_EQ(decisions.at(2).action, format::TokenAction::kPreserve);
+}
+
+TEST_F(LineWrapSearcherTest, PreformattedLinesKeepAlignmentInEitherMode) {
+  constexpr size_t kAlignedSpacing = 8;
+  for (const bool enabled : {false, true}) {
+    auto style = testStyle();
+    style.try_wrap_long_lines = enabled;
+    auto line = makeLine("aaaaaa bbbbb ccccc", 3);
+    line.partition_policy = format::PartitionPolicy::kAlreadyFormatted;
+    line.tokens.at(1).before.spaces_required = kAlignedSpacing;
+    std::vector<format::UnwrappedLine<format::FormatToken>> lines{line};
+
+    format::applyLineWraps(lines, style);
+
+    for (const auto& token : lines.front().tokens) {
+      EXPECT_EQ(token.decision.action, format::TokenAction::kAppend);
+    }
+    EXPECT_EQ(lines.front().tokens.at(1).decision.spaces_before,
+              kAlignedSpacing);
   }
 }

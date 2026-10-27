@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Verihogg SystemVerilog Formatter Configuration",
-  "description": "Configuration for the Verihogg SystemVerilog formatter. Basic layout options are implemented; other style options and named profiles are reserved and have no effect yet.",
+  "description": "Configuration for the Verihogg SystemVerilog formatter. Basic layout options and optional line-wrap optimization are implemented; other style options and named profiles are reserved and have no effect yet.",
   "type": "object",
   "additionalProperties": false,
 
@@ -283,7 +283,7 @@
 
     "try_wrap_long_lines": {
       "type": "boolean",
-      "description": "Allow optimization-based wrapping of long lines. Not implemented yet: accepted and stored, but has no effect on formatting. The formatter currently always runs the line-wrap search.",
+      "description": "Enable optimization-based wrapping toward column_limit. When false, format fitting lines normally and retain original inter-token whitespace on overflowing lines. Structural and mandatory breaks remain active; break prohibitions and preformatted alignment take precedence. Search limits use the same fallback.",
       "default": false
     },
 

@@ -585,7 +585,9 @@ TEST_F(PrinterTest, BoundsSearchForNestedTernaryExpressions) {
   }
   source += "15" + std::string(kNestedTernaryDepth, ')') + "; endmodule\n";
 
-  const auto formatted = formatText(source);
+  auto style = format::FormatStyle::defaults();
+  style.try_wrap_long_lines = true;
+  const auto formatted = formatText(source, style);
   EXPECT_NE(formatted.find("\n  assign out = "), std::string::npos);
   EXPECT_EQ(std::count(formatted.begin(), formatted.end(), '?'),
             kNestedTernaryDepth);

@@ -54,8 +54,10 @@ class PrintState {
 
   auto appendComment(std::string_view text) -> void { current_.append(text); }
 
-  auto finishLine() -> void {
-    trimCurrentLine();
+  auto finishLine(bool trim_trailing_spaces = true) -> void {
+    if (trim_trailing_spaces) {
+      trimCurrentLine();
+    }
     lines_.push_back(CompletedLine{.text = std::move(current_),
                                    .has_code = current_has_code_});
     current_.clear();
@@ -362,12 +364,39 @@ auto printLine(const UnwrappedLine<FormatToken>& line, PrintState& state,
                                       .action = TokenAction::kAppend}
                  : ft.decision;
 
+    if (decision.action == TokenAction::kPreserve) {
+      for (const Trivia& trivia : ft.token.trivia()) {
+        if (trivia.kind == TriviaKind::EndOfLine) {
+          state.finishLine(false);
+        } else {
+          state.appendRaw(triviaText(trivia));
+        }
+      }
+      state.appendToken(ft.token.rawText());
+      continue;
+    }
+
     const size_t tcs = (i == 0) ? ft.before.comment_spaces : 0;
 
     const TriviaEffect trivia =
         (i == 0 && skip_first_trivia)
             ? TriviaEffect{}
             : emitLeadingTrivia(ft.token, Indent(indent, tcs), state);
+
+    // Keep inline comments attached to the preceding token when wrapping
+    // before the next token. Moving them to the continuation line can make
+    // them look detached on the next formatting pass.
+    if (decision.action == TokenAction::kWrap &&
+        !trivia.inline_comments.empty() && !state.currentLineEmpty()) {
+      for (const auto& comment : trivia.inline_comments) {
+        state.appendRaw(comment.spaces_before);
+        state.appendComment(comment.text);
+      }
+      state.finishLine();
+      state.ensureIndent(decision.spaces_before);
+      state.appendToken(ft.token.rawText());
+      continue;
+    }
 
     if (i == 0 || state.currentLineEmpty()) {
       state.finishLineIfNeeded();

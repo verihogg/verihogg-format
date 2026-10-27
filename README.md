@@ -6,7 +6,7 @@
 
 **verihogg-format** is a code formatter for SystemVerilog (IEEE 1800-2017) that automatically reformats source code: indentation, spacing, and tabular alignment of ports and declarations.
 
-> **Note:** Automatic line wrapping (breaking long lines to fit within the column limit) is not yet implemented — it is the next major feature on the roadmap.
+> **Note:** Automatic line-wrap optimization is opt-in. Enable it with `--try_wrap_long_lines` or `try_wrap_long_lines: true` in the configuration file.
 
 > **Status:** This tool is under active development. It handles common SystemVerilog patterns but may produce unexpected formatting on some constructs. If you encounter such a case, please [open an issue](https://github.com/verihogg/verihogg-format/issues) with a minimal example.
 
@@ -34,13 +34,13 @@
 
 - Basic indentation with a configurable number of spaces
 - Tabular alignment of port lists and declarations
+- Optional line-wrap optimization toward the configured column limit
 - YAML configuration file support (`.verihogg-format.yaml`, validated against a JSON Schema)
 - Docker image published to GitHub Container Registry
 - Nix build for reproducible environments
 
 **Planned**
 
-- Automatic line wrapping (breaking long lines to fit the column limit)
 - Formatting of comments
 - Predefined formatting styles (e.g. SCR1, UVM, custom profiles)
 
@@ -122,19 +122,44 @@ docker run --rm -v "$(pwd)":/data -w /data \
 | `-b, --line_break_penalty N`        | Penalty for breaking a line (default: `2`).                    |
 | `-p, --over_column_limit_penalty N` | Penalty per character over the column limit (default: `100`).  |
 | `-t, --line_terminator MODE`        | Line ending style: `auto` \| `lf` \| `crlf` (default: `auto`). |
+| `--try_wrap_long_lines`             | Enable line-wrap optimization (default: `false`).               |
+| `--no_try_wrap_long_lines`          | Disable line-wrap optimization, including a value set in YAML. |
 | `--config PATH`                     | Use this configuration file instead of searching for one.      |
 | `-h, --help`                        | Show help and exit.                                            |
-
-### Reserved style options (not yet implemented)
 
 The basic formatting options in the preceding table are implemented.
 `line_terminator: auto` currently emits LF; detecting line endings from the
 input is not implemented yet.
 
+### Long-line wrapping
+
+With `try_wrap_long_lines: false` (the default), lines that fit within
+`column_limit` receive normal spacing. When a logical line still exceeds the
+limit after normal spacing and mandatory breaks, its original inter-token
+whitespace is retained, including existing line breaks, tabs and comments.
+Indentation at the start of the logical line is still formatted. Mandatory
+breaks and rules prohibiting breaks take precedence over the input layout.
+Structural line breaks and tabular alignment remain active in both modes.
+
+Set `try_wrap_long_lines: true` to choose additional breaks using `column_limit`,
+`wrap_spaces` and the line-break penalties:
+
+```sh
+formatter --try_wrap_long_lines --column_limit 80 src/module.sv
+```
+
+The column limit is a target: unbreakable tokens and preformatted alignment
+groups can exceed it. If the search reaches its token or state limit, the
+formatter uses the same fallback as when optimization is disabled, retaining
+mandatory breaks and the original whitespace of overflowing lines.
+
+Previously the formatter always ran the search; the existing default of
+`false` now takes effect. Enable the option to retain automatic wrapping.
+
+### Reserved style options (not yet implemented)
+
 All options in the table below are accepted by the CLI and configuration loader
-and stored in `FormatStyle`, but **have no effect on formatting yet**. In
-particular, `try_wrap_long_lines` does not control line wrapping: the formatter
-currently always runs the line-wrap search.
+and stored in `FormatStyle`, but **have no effect on formatting yet**.
 
 Every option below mirrors a key of the configuration file. A value passed on
 the command line overrides the value stored from the configuration file.
@@ -163,7 +188,6 @@ the command line overrides the value stored from the configuration file.
 | `--compact_indexing_and_selections`          | Use compact expressions inside indexes and selections (default: `true`).                             |
 | `--class_parameter_space`                    | Insert a space before `#` in parameterized class typedefs (default: `false`).                        |
 | `--expand_coverpoints`                       | Always expand coverpoints (default: `false`).                                                        |
-| `--try_wrap_long_lines`                      | Allow optimization-based wrapping of long lines (default: `false`).                                  |
 | `--wrap_end_else_clauses`                    | Place `end` and `else` clauses on separate lines (default: `false`).                                 |
 
 For an alignment option `MODE` is one of `align`, `flush-left`, `preserve` or

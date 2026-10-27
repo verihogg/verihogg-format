@@ -64,11 +64,17 @@ Formatting options:
   -b, --line_break_penalty <N>         Penalty for each line break (default: 2)
   -p, --over_column_limit_penalty <N>  Penalty per character over limit (default: 100)
   -t, --line_terminator <mode>         auto | lf | crlf (default: auto; auto currently emits LF)
+      --try_wrap_long_lines            Optimize line wrapping toward column_limit (default: false)
+      --no_try_wrap_long_lines         Disable optional line-wrap optimization
       --config <path>                  Load configuration from a YAML file
   -n, --inplace                        Overwrite source files instead of stdout
 
+With line-wrap optimization disabled, overflowing lines retain their original
+inter-token whitespace. Structural and mandatory breaks remain active, and
+break prohibitions and preformatted alignment take precedence. Search limits
+use the same fallback.
+
 The style options below are reserved and do not affect formatting yet.
-Line-wrap search currently always runs, regardless of --try_wrap_long_lines.
 
 Alignment options (align | flush-left | preserve | infer, default: infer):
       --port_declarations_alignment
@@ -100,7 +106,6 @@ Boolean options (use --no_<name> to disable):
       --compact_indexing_and_selections   (default: true)
       --class_parameter_space
       --expand_coverpoints
-      --try_wrap_long_lines
       --wrap_end_else_clauses
 
 Every option above mirrors a key of the YAML configuration file.
@@ -236,7 +241,8 @@ FormatArgsBinder::FormatArgsBinder() {
   add_negatable_flag(app_, "--expand_coverpoints", expand_coverpoints_,
                      "Always expand coverpoints");
   add_negatable_flag(app_, "--try_wrap_long_lines", try_wrap_long_lines_,
-                     "Allow optimization-based wrapping of long lines");
+                     "Optimize long-line wrapping; otherwise retain original "
+                     "inter-token whitespace on overflowing lines");
   add_negatable_flag(app_, "--wrap_end_else_clauses", wrap_end_else_clauses_,
                      "Place end and else clauses on separate lines");
 

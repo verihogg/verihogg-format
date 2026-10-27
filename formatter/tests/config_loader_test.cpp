@@ -12,7 +12,10 @@
 #include <string_view>
 #include <system_error>
 
+#include "cli/format_args.h"
 #include "data/format_style.h"
+#include "data/lex_context.h"
+#include "formatter.h"
 
 namespace {
 
@@ -101,6 +104,37 @@ class ConfigLoaderTest : public ::testing::Test {
  private:
   fs::path dir_;
 };
+
+TEST_F(ConfigLoaderTest, LongLineWrappingAffectsOutputAndAllowsCliOverride) {
+  const auto path = writeFile("cfg.yaml",
+                              "version: \"0.1.0\"\n"
+                              "column_limit: 40\n"
+                              "try_wrap_long_lines: true\n");
+  auto style = loadConfigFile(path);
+  constexpr std::string_view kSource =
+      "module m;\n"
+      "  assign result=alpha_long+beta_long+gamma_long;\n"
+      "endmodule\n";
+  LexContext ctx;
+  const auto tokens = ctx.lex_string(kSource);
+  const auto wrapped = format::format(tokens, style, ctx.source_text());
+  EXPECT_TRUE(wrapped.warnings.empty());
+  EXPECT_EQ(wrapped.formatted_text,
+            "module m;\n"
+            "  assign result = alpha_long +\n"
+            "      beta_long + gamma_long;\n"
+            "endmodule\n");
+
+  format::FormatArgsBinder binder;
+  std::string program = "formatter";
+  std::string flag = "--no_try_wrap_long_lines";
+  std::array<char*, 2> argv{program.data(), flag.data()};
+  binder.parse(static_cast<int>(argv.size()), argv.data());
+  binder.applyStyleOverrides(style);
+  const auto unwrapped = format::format(tokens, style, ctx.source_text());
+  EXPECT_TRUE(unwrapped.warnings.empty());
+  EXPECT_EQ(unwrapped.formatted_text, kSource);
+}
 
 TEST_F(ConfigLoaderTest, MinimalConfigKeepsDefaults) {
   const fs::path path = writeFile("cfg.yaml", "version: \"0.1.0\"\n");
