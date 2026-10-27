@@ -1,1 +1,4 @@
 /build/
+
+# Default cache of successful formatting checks
+.verihogg-format-cache/

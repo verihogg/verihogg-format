@@ -2,7 +2,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -101,6 +103,8 @@ enum class AlignmentGroupBoundary : uint8_t {
 
 struct RunConfig {
   bool inplace = false;
+  bool check = false;
+  std::optional<std::string> cache_directory;
   std::string stdin_name = "<stdin>";
   std::vector<std::string> input_files{};
 };

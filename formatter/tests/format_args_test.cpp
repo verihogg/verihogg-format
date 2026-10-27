@@ -120,8 +120,47 @@ TEST_F(FormatArgsTest, CustomOverColumnLimitPenalty) {
 }
 
 // ---------------------------------------------------------------------------
-// --inplace flag
+// --inplace and --check flags
 // ---------------------------------------------------------------------------
+
+TEST_F(FormatArgsTest, CheckFlagSetsRunConfig) {
+  const auto [style, run] = buildStyle({"--check"});
+  EXPECT_TRUE(run.check);
+  EXPECT_FALSE(run.inplace);
+}
+
+TEST_F(FormatArgsTest, CheckIsDisabledByDefault) {
+  const auto [style, run] = buildStyle();
+  EXPECT_FALSE(run.check);
+}
+
+TEST_F(FormatArgsTest, CheckAndInplaceAreMutuallyExclusive) {
+  EXPECT_FALSE(parse({"--check", "--inplace"}));
+  EXPECT_FALSE(parse({"--inplace", "--check"}));
+}
+
+TEST_F(FormatArgsTest, CacheUsesDefaultDirectoryWithoutConsumingFile) {
+  const auto [style, run] = buildStyle({"--check", "--cache", "input.sv"});
+  EXPECT_EQ(run.cache_directory, ".verihogg-format-cache");
+  ASSERT_EQ(getBinder().files().size(), 1U);
+  EXPECT_EQ(getBinder().files().front(), "input.sv");
+}
+
+TEST_F(FormatArgsTest, CacheAcceptsExplicitDirectory) {
+  const auto [style, run] = buildStyle({"--check", "--cache=some cache"});
+  EXPECT_EQ(run.cache_directory, "some cache");
+}
+
+TEST_F(FormatArgsTest, CacheRequiresCheck) { EXPECT_FALSE(parse({"--cache"})); }
+
+TEST_F(FormatArgsTest, CacheRejectsExplicitlyDisabledCheck) {
+  EXPECT_FALSE(parse({"--check=false", "--cache"}));
+}
+
+TEST_F(FormatArgsTest, CacheIsDisabledByDefault) {
+  const auto [style, run] = buildStyle({"--check"});
+  EXPECT_FALSE(run.cache_directory.has_value());
+}
 
 TEST_F(FormatArgsTest, InplaceFlagSetsRunConfig) {
   auto [style, run] = buildStyle({"--inplace"});
