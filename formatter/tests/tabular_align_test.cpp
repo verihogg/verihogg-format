@@ -328,3 +328,83 @@ TEST_F(TabularAlignerTest, WithinColumnLimitAppliesAlignment) {
       << " Alignment should be applied when within column_limit:\n"
       << result;
 }
+
+// Exact pre-refactor output for ports, declarations, assignments, comments,
+// directives, and case items, with and without a restrictive column limit.
+TEST_F(TabularAlignerTest, PreservesLegacyFormattingAcrossPipeline) {
+  constexpr std::string_view input = R"sv(module demo (
+  input logic a,
+  output logic [7:0] value,
+  input logic clk
+);
+logic a; // first
+logic longer; // second
+assign a = clk;
+assign longer = value;
+`ifdef FOO
+logic x;
+logic yyyy;
+`endif
+always_comb begin
+  case (a)
+    0: value = 1;
+    123: value = 0;
+  endcase
+end
+endmodule
+)sv";
+  constexpr std::string_view expected = R"sv(module demo (
+input   logic                a,
+output  logic [7 : 0]        value,
+input   logic                clk
+);
+  logic    a;             // first
+  logic    longer;        // second
+  assign a       = clk;
+  assign longer  = value;
+`ifdef FOO
+  logic    x;
+  logic    yyyy;
+`endif
+  always_comb
+    begin
+      case (a)
+        0   : value = 1;
+        123 : value = 0;
+      endcase
+    end
+endmodule
+)sv";
+  constexpr std::string_view expected_narrow = R"sv(module demo (
+input logic a,
+output logic [7 : 0]
+    value,
+input logic clk
+);
+  logic    a;             // first
+  logic    longer;        // second
+  assign a = clk;
+  assign longer =
+      value;
+`ifdef FOO
+  logic    x;
+  logic    yyyy;
+`endif
+  always_comb
+    begin
+      case (a)
+        0 :
+          value = 1;
+        123 :
+          value = 0;
+      endcase
+    end
+endmodule
+)sv";
+  EXPECT_EQ(formatText(input), expected);
+  EXPECT_EQ(formatText(expected), expected);
+  auto style = format::FormatStyle::defaults();
+  constexpr size_t kNarrowColumnLimit = 20;
+  style.column_limit = kNarrowColumnLimit;
+  EXPECT_EQ(formatText(input, style), expected_narrow);
+}

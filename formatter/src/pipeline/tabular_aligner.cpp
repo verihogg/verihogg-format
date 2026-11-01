@@ -2,7 +2,11 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <optional>
 #include <string_view>
+#include <utility>
+
+#include "pipeline/alignment_layout.h"
 
 namespace format {
 
@@ -15,20 +19,10 @@ static constexpr size_t kMinSpacesCaseItem = 1;
 static constexpr size_t kMinSpacesPortDirectionType = 2;
 static constexpr size_t kMinSpacesPortTypeName = 8;
 
-struct AlignmentCell {
-  size_t start_idx = 0;
-  size_t end_idx = 0;
-  size_t width = 0;
-};
-
-using AlignmentRow = std::vector<AlignmentCell>;
-
-struct AlignmentGroup {
+struct PendingGroup {
   PartitionPolicy policy = PartitionPolicy::kAlwaysExpand;
   std::vector<size_t> line_indices;
-  size_t num_columns = 0;
-  std::vector<AlignmentRow> table;
-  std::vector<size_t> col_max_width;
+  alignment::Group layout;
 };
 
 [[nodiscard]] static auto is_assignment_operator(const FormatToken& ft)
@@ -46,18 +40,6 @@ struct AlignmentGroup {
   return line.tokens.front().token.kind == slang::parsing::TokenKind::Directive;
 }
 
-[[nodiscard]] auto static range_width(const std::vector<FormatToken>& tokens,
-                                      size_t start, size_t end) -> size_t {
-  size_t width = 0;
-  for (size_t i = start; i < end; ++i) {
-    if (i != start) {
-      width += tokens.at(i).before.spaces_required;
-    }
-    width += tokens.at(i).token.rawText().size();
-  }
-  return width;
-}
-
 [[nodiscard]] static auto is_suffix_token(const FormatToken& ft) -> bool {
   if (ft.type != TokenType::kUnknown) {
     return ft.type == TokenType::kComma || ft.type == TokenType::kSemicolon;
@@ -67,8 +49,8 @@ struct AlignmentGroup {
 }
 
 [[nodiscard]] auto static build_row(const UnwrappedLine<FormatToken>& line)
-    -> AlignmentRow {
-  AlignmentRow row;
+    -> std::vector<alignment::Cell> {
+  std::vector<alignment::Cell> row;
   const auto& tokens = line.tokens;
   if (tokens.empty()) {
     return row;
@@ -80,11 +62,7 @@ struct AlignmentGroup {
     if (end <= cell_start) {
       return;
     }
-    row.push_back(AlignmentCell{
-        .start_idx = cell_start,
-        .end_idx = end,
-        .width = range_width(tokens, cell_start, end),
-    });
+    row.push_back({.begin = cell_start, .end = end});
     cell_start = end;
   };
 
@@ -125,8 +103,8 @@ struct AlignmentGroup {
 }
 
 [[nodiscard]] static auto build_assignment_row(
-    const UnwrappedLine<FormatToken>& line) -> AlignmentRow {
-  AlignmentRow row;
+    const UnwrappedLine<FormatToken>& line) -> std::vector<alignment::Cell> {
+  std::vector<alignment::Cell> row;
   auto& tokens = line.tokens;
   if (tokens.empty()) {
     return row;
@@ -156,20 +134,12 @@ struct AlignmentGroup {
     }
   }
 
-  if (op_idx == tokens.size()) {
+  if (op_idx == 0 || op_idx == tokens.size()) {
     return row;
   }
 
-  AlignmentCell left_cell{.start_idx = 0,
-                          .end_idx = op_idx,
-                          .width = range_width(tokens, 0, op_idx)};
-
-  AlignmentCell right_cell{.start_idx = op_idx,
-                           .end_idx = tokens.size(),
-                           .width = range_width(tokens, op_idx, tokens.size())};
-
-  row.push_back(left_cell);
-  row.push_back(right_cell);
+  row.push_back({.begin = 0, .end = op_idx});
+  row.push_back({.begin = op_idx, .end = tokens.size()});
   return row;
 }
 
@@ -199,21 +169,20 @@ struct AlignmentGroup {
 }
 
 [[nodiscard]] static auto is_case_item_group(
-    const AlignmentGroup& group,
+    const PendingGroup& group,
     const std::vector<UnwrappedLine<FormatToken>>& lines) -> bool {
   if (group.policy != PartitionPolicy::kTabularAlignment ||
-      group.num_columns < 2 || group.table.empty()) {
+      group.layout.rows.empty() || group.layout.rows.front().cells.size() < 2) {
     return false;
   }
   const auto& tokens = lines.at(group.line_indices.front()).tokens;
-  const AlignmentCell& second = group.table.front().at(1);
-  return (second.end_idx > second.start_idx) &&
-         tokens.at(second.start_idx).token.kind ==
-             slang::parsing::TokenKind::Colon;
+  const auto& second = group.layout.rows.front().cells.at(1);
+  return (second.end > second.begin) &&
+         tokens.at(second.begin).token.kind == slang::parsing::TokenKind::Colon;
 }
 
 [[nodiscard]] static auto is_port_list_group(
-    const AlignmentGroup& group,
+    const PendingGroup& group,
     const std::vector<UnwrappedLine<FormatToken>>& lines) -> bool {
   if (group.policy != PartitionPolicy::kTabularAlignment ||
       group.line_indices.empty()) {
@@ -224,7 +193,7 @@ struct AlignmentGroup {
 }
 
 [[nodiscard]] static auto gap_before_column(
-    const AlignmentGroup& group,
+    const PendingGroup& group,
     const std::vector<UnwrappedLine<FormatToken>>& lines, size_t column_index)
     -> size_t {
   if (group.policy == PartitionPolicy::kAssignmentAlignment) {
@@ -244,81 +213,64 @@ struct AlignmentGroup {
   return kMinColumnGap;
 }
 
-static void apply_group(AlignmentGroup& group,
+static void apply_group(PendingGroup& group,
                         std::vector<UnwrappedLine<FormatToken>>& lines,
                         const FormatStyle& style) {
   if (group.line_indices.size() < kMinGroupSize) {
     return;
   }
-
-  std::vector<size_t> column_offset(group.num_columns, 0);
-  for (size_t c = 1; c < group.num_columns; ++c) {
-    const size_t gap = gap_before_column(group, lines, c);
-    column_offset.at(c) =
-        column_offset.at(c - 1) + group.col_max_width.at(c - 1) + gap;
+  const size_t num_columns = group.layout.rows.front().cells.size();
+  std::vector<size_t> gaps(num_columns, 0);
+  for (size_t c = 1; c < num_columns; ++c) {
+    gaps.at(c) = gap_before_column(group, lines, c);
   }
-
-  const size_t formatted_code_width =
-      column_offset.empty() ? 0
-                            : column_offset.back() + group.col_max_width.back();
-
-  size_t max_total_width = 0;
-  for (size_t line_i : group.line_indices) {
-    const size_t indent = lines.at(line_i).indentation_spaces;
-    max_total_width = std::max(max_total_width, indent + formatted_code_width);
-  }
-
-  if (max_total_width > style.column_limit) {
+  group.layout.alignment_gaps = std::move(gaps);
+  const auto action = alignment::applyPolicy(
+      group.layout, AlignmentPolicy::kAlign, style.column_limit);
+  const auto* formatted =
+      action ? std::get_if<alignment::FormatSpacing>(&*action) : nullptr;
+  if (formatted == nullptr || !formatted->alignment_width) {
     return;
   }
 
-  const size_t comment_column = max_total_width + kCommentColumnGap;
+  size_t max_total_width = 0;
   bool any_comment = false;
   for (size_t line_i : group.line_indices) {
-    if (has_comment(lines, line_i)) {
-      any_comment = true;
-      break;
-    }
+    max_total_width =
+        std::max(max_total_width, lines.at(line_i).indentation_spaces +
+                                      *formatted->alignment_width);
+    any_comment = any_comment || has_comment(lines, line_i);
   }
+  const size_t comment_column = max_total_width + kCommentColumnGap;
 
   for (size_t row_i = 0; row_i < group.line_indices.size(); ++row_i) {
     const size_t line_i = group.line_indices.at(row_i);
     auto& line = lines.at(line_i);
     auto& tokens = line.tokens;
-    const AlignmentRow& row = group.table.at(row_i);
-
-    size_t cursor = line.indentation_spaces;
-
-    for (size_t c = 0; c < row.size(); ++c) {
-      const AlignmentCell& cell = row.at(c);
-
-      if (c == 0) {
-        cursor = line.indentation_spaces + cell.width;
-        continue;
+    const auto& row = group.layout.rows.at(row_i);
+    const auto& spaces = formatted->spaces.at(row_i);
+    size_t end_column = line.indentation_spaces;
+    for (size_t i = 0; i < row.tokens.size(); ++i) {
+      if (i > 0) {
+        end_column += spaces.at(i);
       }
-      const size_t target_abs = line.indentation_spaces + column_offset.at(c);
-      const size_t spaces = (target_abs > cursor) ? (target_abs - cursor) : 1;
-
-      FormatToken& first = tokens.at(cell.start_idx);
-      first.before.spaces_required = spaces;
-
-      cursor = target_abs + cell.width;
-
-      if (group.policy == PartitionPolicy::kAssignmentAlignment && c == 1) {
-        if (cell.start_idx + 1 < tokens.size()) {
-          tokens.at(cell.start_idx + 1).before.spaces_required =
-              kMinSpacesAfterAssignment;
-        }
+      end_column += row.tokens.at(i).text.size();
+    }
+    for (size_t c = 1; c < row.cells.size(); ++c) {
+      const size_t index = row.cells.at(c).begin;
+      tokens.at(index).before.spaces_required = spaces.at(index);
+      if (group.policy == PartitionPolicy::kAssignmentAlignment && c == 1 &&
+          index + 1 < tokens.size()) {
+        tokens.at(index + 1).before.spaces_required = kMinSpacesAfterAssignment;
       }
     }
     if (any_comment) {
       const size_t next_i = line_i + 1;
       if (next_i < lines.size() && !lines.at(next_i).tokens.empty()) {
-        const size_t spaces = (comment_column > cursor)
-                                  ? (comment_column - cursor)
-                                  : kCommentColumnGap;
-
-        lines.at(next_i).tokens.at(0).before.comment_spaces = spaces;
+        const size_t comment_spaces = (comment_column > end_column)
+                                          ? (comment_column - end_column)
+                                          : kCommentColumnGap;
+        lines.at(next_i).tokens.at(0).before.comment_spaces = comment_spaces;
       }
     }
     line.partition_policy = PartitionPolicy::kAlreadyFormatted;
@@ -327,11 +279,11 @@ static void apply_group(AlignmentGroup& group,
 
 static void process_lines(std::vector<UnwrappedLine<FormatToken>>& lines,
                           const FormatStyle& style) {
-  AlignmentGroup current_group;
+  PendingGroup current_group;
 
   auto flush = [&]() {
     apply_group(current_group, lines, style);
-    current_group = AlignmentGroup{};
+    current_group = PendingGroup{};
   };
 
   for (size_t i = 0; i < lines.size(); ++i) {
@@ -359,41 +311,52 @@ static void process_lines(std::vector<UnwrappedLine<FormatToken>>& lines,
       continue;
     }
 
-    AlignmentRow row;
-    if (is_tabular) {
-      row = build_row(line);
-    } else {
-      row = build_assignment_row(line);
-    }
-
-    if (row.empty()) {
+    const bool unsupported_token =
+        std::ranges::any_of(line.tokens, [](const FormatToken& token) {
+          const auto text = token.token.rawText();
+          return text.empty() ||
+                 text.find_first_of("\r\n") != std::string_view::npos;
+        });
+    if (unsupported_token) {
       if (!current_group.line_indices.empty()) {
         flush();
       }
       continue;
     }
 
-    const size_t ncols = row.size();
+    std::vector<alignment::Cell> cells;
+    if (is_tabular) {
+      cells = build_row(line);
+    } else {
+      cells = build_assignment_row(line);
+    }
+
+    if (cells.empty()) {
+      if (!current_group.line_indices.empty()) {
+        flush();
+      }
+      continue;
+    }
 
     if (!current_group.line_indices.empty() &&
-        (current_group.num_columns != ncols ||
+        (current_group.layout.rows.front().cells.size() != cells.size() ||
          current_group.policy != line.partition_policy)) {
       flush();
     }
 
     if (current_group.line_indices.empty()) {
-      current_group.num_columns = ncols;
-      current_group.col_max_width.assign(ncols, 0);
       current_group.policy = line.partition_policy;
     }
 
-    for (size_t c = 0; c < ncols; ++c) {
-      current_group.col_max_width.at(c) =
-          std::max(current_group.col_max_width.at(c), row.at(c).width);
+    auto& row = current_group.layout.rows.emplace_back();
+    row.indentation = line.indentation_spaces;
+    row.cells = std::move(cells);
+    for (const auto& token : line.tokens) {
+      row.tokens.push_back({.text = token.token.rawText(),
+                            .min_spaces = token.before.spaces_required,
+                            .source_offset = std::nullopt});
     }
-
     current_group.line_indices.push_back(i);
-    current_group.table.push_back(std::move(row));
   }
   flush();
 }
