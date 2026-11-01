@@ -53,7 +53,7 @@ TEST_F(PrinterTest, FormatsMacroInvocationAcrossSourceLines) {
             "endmodule\n");
 }
 
-TEST_F(PrinterTest, FormatsUnknownMacroCallWithoutWarning) {
+TEST_F(PrinterTest, FormatsUnknownMacroCallWithFallbackDiagnostic) {
   const std::string source =
       "module m(); initial $display(`EXTERNAL(1)); endmodule\n";
   LexContext ctx;
@@ -65,7 +65,8 @@ TEST_F(PrinterTest, FormatsUnknownMacroCallWithoutWarning) {
             ");\n"
             "  initial $display (`EXTERNAL (1));\n"
             "endmodule\n");
-  EXPECT_TRUE(result.warnings.empty());
+  ASSERT_EQ(result.warnings.size(), 1U);
+  EXPECT_EQ(result.warnings.front().code, "annex-a-fallback");
 }
 
 TEST_F(PrinterTest, FormatsStringifiedMacroInvocation) {
@@ -91,7 +92,8 @@ TEST_F(PrinterTest, FormatsStringifiedMacroInvocation) {
             "    end\n"
             "  logic y;\n"
             "endmodule\n");
-  EXPECT_TRUE(result.warnings.empty());
+  ASSERT_EQ(result.warnings.size(), 1U);
+  EXPECT_EQ(result.warnings.front().code, "annex-a-fallback");
 }
 
 TEST_F(PrinterTest, FormatsMacroFromIncludedFile) {
@@ -117,7 +119,8 @@ TEST_F(PrinterTest, FormatsMacroFromIncludedFile) {
             "    end\n"
             "  logic y;\n"
             "endmodule\n");
-  EXPECT_TRUE(result.warnings.empty());
+  ASSERT_EQ(result.warnings.size(), 1U);
+  EXPECT_EQ(result.warnings.front().code, "annex-a-fallback");
 }
 
 TEST_F(PrinterTest, FormatsNestedMacroCalls) {
@@ -260,12 +263,12 @@ TEST_F(PrinterTest, FormatsAfterUnknownEnclosingBlock) {
             "endmodule\n");
 }
 
-TEST_F(PrinterTest, FormatsImmediatelyAfterOpaqueBlockOnSameLine) {
+TEST_F(PrinterTest, PreservesUnsupportedBlockAndSameLineRemainder) {
   EXPECT_EQ(formatText("module m;\n"
                        "  covergroup cg; endgroup logic   b ;\n"
                        "endmodule\n"),
             "module m;\n"
-            "  covergroup cg; endgroup logic b;\n"
+            "  covergroup cg; endgroup logic   b ;\n"
             "endmodule\n");
 }
 
@@ -282,7 +285,7 @@ TEST_F(PrinterTest, PreservesJunkToEndOfModule) {
             "endmodule\n");
 }
 
-TEST_F(PrinterTest, PreservesInvalidAnnotatedLineAndResumes) {
+TEST_F(PrinterTest, PreservesMalformedAssignmentToModuleEnd) {
   EXPECT_EQ(formatText("module m;\n"
                        "  logic   a ;\n"
                        "  assign y  = foo]bar;   // bad\n"
@@ -291,18 +294,18 @@ TEST_F(PrinterTest, PreservesInvalidAnnotatedLineAndResumes) {
             "module m;\n"
             "  logic a;\n"
             "  assign y  = foo]bar;   // bad\n"
-            "  logic b;\n"
+            "  logic   b ;\n"
             "endmodule\n");
 }
 
-TEST_F(PrinterTest, PreservesUntilNewLineAfterInvalidAnnotation) {
+TEST_F(PrinterTest, PreservesMalformedAssignmentAndModuleRemainder) {
   EXPECT_EQ(formatText("module m;\n"
                        "  assign y  = foo]bar; logic   b ;\n"
                        "  logic   c ;\n"
                        "endmodule\n"),
             "module m;\n"
             "  assign y  = foo]bar; logic   b ;\n"
-            "  logic c;\n"
+            "  logic   c ;\n"
             "endmodule\n");
 }
 
@@ -319,18 +322,18 @@ TEST_F(PrinterTest, PreservesUnhandledAnnotationTokenAndResumes) {
             "endmodule\n");
 }
 
-TEST_F(PrinterTest, PreservesMissingTernaryColonAndResumes) {
+TEST_F(PrinterTest, PreservesMissingTernaryColonToModuleEnd) {
   EXPECT_EQ(formatText("module m;\n"
                        "  assign y  = a ? b;\n"
                        "  logic   b ;\n"
                        "endmodule\n"),
             "module m;\n"
             "  assign y  = a ? b;\n"
-            "  logic b;\n"
+            "  logic   b ;\n"
             "endmodule\n");
 }
 
-TEST_F(PrinterTest, AnnotatorRecoveryFollowsTreeRecovery) {
+TEST_F(PrinterTest, TreeRecoveryPreservesMalformedModuleRemainder) {
   EXPECT_EQ(formatText("module m;\n"
                        "  covergroup cg;\n"
                        "  endgroup\n"
@@ -341,7 +344,7 @@ TEST_F(PrinterTest, AnnotatorRecoveryFollowsTreeRecovery) {
             "  covergroup cg;\n"
             "  endgroup\n"
             "  assign y  = foo]bar;\n"
-            "  logic b;\n"
+            "  logic   b ;\n"
             "endmodule\n");
 }
 
@@ -450,15 +453,15 @@ TEST_F(PrinterTest, PreservesCommentOnlyFile) {
 }
 
 TEST_F(PrinterTest, PreservesWhitespaceAroundInlineBlockComments) {
-  EXPECT_EQ(formatText("module m (); assign y = a/*tight*/b; "
-                       "assign z = a /*left*/b; assign w = a/*right*/ b; "
-                       "assign v = a /*both*/ b; endmodule"),
+  EXPECT_EQ(formatText("module m (); assign y = a/*tight*/+b; "
+                       "assign z = a /*left*/+b; assign w = a/*right*/+ b; "
+                       "assign v = a /*both*/+ b; endmodule"),
             "module m (\n"
             ");\n"
-            "  assign y  = a/*tight*/b;\n"
-            "  assign z  = a /*left*/b;\n"
-            "  assign w  = a/*right*/ b;\n"
-            "  assign v  = a /*both*/ b;\n"
+            "  assign y  = a/*tight*/+ b;\n"
+            "  assign z  = a /*left*/+ b;\n"
+            "  assign w  = a/*right*/+ b;\n"
+            "  assign v  = a /*both*/+ b;\n"
             "endmodule\n");
 }
 
