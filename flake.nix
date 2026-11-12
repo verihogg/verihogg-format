@@ -57,6 +57,7 @@
                 sv-lang
                 microsoft-gsl
                 cli11
+                libgit2
                 yaml-cpp
                 valijson
               ]

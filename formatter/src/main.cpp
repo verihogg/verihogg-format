@@ -6,6 +6,7 @@
 #include <iostream>
 #include <iterator>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -15,6 +16,7 @@
 #include "data/lex_context.h"
 #include "formatter.h"
 #include "pipeline/runner.h"
+#include "pipeline/unified_diff.h"
 
 auto main(int argc, char** argv) -> int {
   try {
@@ -22,6 +24,9 @@ auto main(int argc, char** argv) -> int {
 
     auto args = gsl::span(argv, argc);
     for (std::string_view arg : args.subspan(1)) {
+      if (arg == "--") {
+        break;
+      }
       if (arg == "--help" || arg == "-h") {
         binder.printFormatterHelp();
         return 0;
@@ -44,6 +49,12 @@ auto main(int argc, char** argv) -> int {
             ? std::optional<std::filesystem::path>{*binder.configPath()}
             : std::nullopt);
     const format::RunConfig run = binder.buildRunConfig();
+    if ((run.check || run.diff) && !driver.sourceLoader.getErrors().empty()) {
+      for (const auto& error : driver.sourceLoader.getErrors()) {
+        std::cerr << "Error: " << error << "\n";
+      }
+      return 1;
+    }
 
     auto applyOverrides = [&binder](format::FormatStyle style) {
       binder.applyStyleOverrides(style);
@@ -55,6 +66,16 @@ auto main(int argc, char** argv) -> int {
     };
 
     const auto& files = driver.sourceLoader.getFilePaths();
+
+    if (run.check && files.empty()) {
+      std::cerr << "Error: --check requires input files\n";
+      return 1;
+    }
+
+    if (run.diff && files.empty() && !binder.files().empty()) {
+      std::cerr << "Error: no input files matched\n";
+      return 1;
+    }
 
     if (run.inplace && files.empty()) {
       std::cerr << "Warning: --inplace has no effect when reading from stdin\n";
@@ -73,7 +94,16 @@ auto main(int argc, char** argv) -> int {
       for (const auto& warning : result.warnings) {
         format::printWarning(std::cerr, "<stdin>", warning);
       }
-      std::cout << result.formatted_text;
+      if (run.diff) {
+        std::cout << format::makeUnifiedDiff(source, result.formatted_text,
+                                             run.stdin_name);
+        std::cout.flush();
+        if (!std::cout) {
+          throw std::runtime_error("Cannot write diff output");
+        }
+      } else {
+        std::cout << result.formatted_text;
+      }
       return 0;
     }
 
@@ -84,8 +114,9 @@ auto main(int argc, char** argv) -> int {
     for (const auto& file : files) {
       styles.push_back(styleFor(file));
     }
-    runFormatter(files, styles, run, {.out = &std::cout, .err = &std::cerr});
-    return 0;
+    const int result = runFormatter(files, styles, run,
+                                    {.out = &std::cout, .err = &std::cerr});
+    return (run.check || run.diff) && result > 0 ? 1 : 0;
   } catch (const std::exception& e) {
     std::cerr << "Error: " << e.what() << "\n";
     return 1;

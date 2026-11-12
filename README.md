@@ -127,6 +127,8 @@ docker run --rm -v "$(pwd)":/data -w /data \
 
 | Option                              | Description                                                    |
 | ----------------------------------- | -------------------------------------------------------------- |
+| `--diff` | Print a Git-style unified patch without modifying files; incompatible with `--inplace`. |
+| `--check`                         | Check formatting without writing files; incompatible with `--inplace`. |
 | `-n, --inplace`                     | Overwrite source files instead of printing to stdout.          |
 | `-c, --column_limit N`              | Maximum line length (default: `100`).                          |
 | `-i, --indentation_spaces N`        | Spaces per indent level (default: `2`).                        |
@@ -195,8 +197,8 @@ formatter --no_compact_indexing_and_selections src/*.sv
 
 | Code | Meaning                                       |
 | ---- | --------------------------------------------- |
-| `0`  | Formatting complete, no errors.               |
-| `1`  | Invalid command-line argument, configuration file error or parse error. |
+| `0`  | Formatting or diff output complete, or all checked files match the style.               |
+| `1`  | Error, or a checked file needs formatting or cannot be read. |
 
 ---
 
@@ -246,6 +248,38 @@ column_limit: 120
 ---
 
 ## Usage
+
+Check formatting without changing files:
+
+```bash
+verihogg-format --check file.sv
+```
+
+Check mode requires input files and uses the resolved configuration and CLI
+style overrides for each file. It prints diagnostics to stderr, writes nothing
+to stdout, and exits with 0 when all files match or 1 when a file needs
+formatting or cannot be read. Formatter warnings are also reported. Files are
+checked in parallel; diagnostics follow the input file order.
+
+### Preview formatting changes
+
+```bash
+verihogg-format --diff file.sv
+verihogg-format --check --diff file.sv
+verihogg-format --diff file.sv > changes.patch
+verihogg-format --diff < file.sv
+```
+
+`--diff` prints a Git-style unified patch to stdout and never writes source
+files. Differences alone do not cause a nonzero exit code; add `--check` to
+return 1 when files need formatting. Read, formatting and output errors produce
+a nonzero exit code in either mode. Warnings and errors go to stderr.
+
+File labels are relative to the current working directory. Diff-only mode also
+accepts stdin, using the label `<stdin>` and the configuration resolved for
+stdin. `--check` still requires file arguments, including with `--diff`.
+`--diff` cannot be combined with `--inplace`. Patches from parallel checks are
+printed in input file order. Output is plain text, without terminal colors.
 
 ### Docker (recommended)
 
@@ -325,6 +359,7 @@ If you are not using Nix, install the following dependencies manually:
 
 - C++20-compatible compiler
 - CMake 3.20+
+- [libgit2](https://libgit2.org/) 1.9+ with its CMake package — generation of unified patches
 - [slang](https://github.com/MikePopoloski/slang) — SystemVerilog parser
 - [CLI11](https://github.com/CLIUtils/CLI11) — command-line parser
 - [yaml-cpp](https://github.com/jbeder/yaml-cpp) — YAML parser (configuration files)
