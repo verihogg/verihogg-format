@@ -120,8 +120,9 @@ TEST_F(RunnerCheckTest, ReportsRecoveryWarnings) {
       "bad.sv", "module m;\n  assign y  = foo]bar;   // bad\nendmodule\n");
   check({path}, {{}});
   EXPECT_TRUE(out().empty());
-  EXPECT_NE(err().find("invalid-annotation"), std::string::npos);
-  EXPECT_NE(err().find(path.string()), std::string::npos);
+  EXPECT_NE(err().find("unmatched closing bracket"), std::string::npos);
+  EXPECT_NE(err().find("first at " + path.filename().string() + ":"),
+            std::string::npos);
 }
 
 TEST_F(RunnerCheckTest, ManyFilesKeepIndividualStylesAndDiagnosticOrder) {

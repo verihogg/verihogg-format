@@ -15,6 +15,7 @@
 #include "data/lex_context.h"
 #include "formatter.h"
 #include "pipeline/runner.h"
+#include "pipeline/summary.h"
 
 auto main(int argc, char** argv) -> int {
   try {
@@ -84,10 +85,24 @@ auto main(int argc, char** argv) -> int {
       LexContext ctx;
       auto tokens = ctx.lex_string(source);
       auto result = format::format(tokens, style, ctx.source_text());
-      for (const auto& warning : result.warnings) {
-        format::printWarning(std::cerr, "<stdin>", warning);
-      }
       std::cout << result.formatted_text;
+
+      std::vector<std::pair<std::string, std::size_t>> items;
+      items.reserve(result.warnings.size());
+      for (const auto& warning : result.warnings) {
+        std::size_t line = warning.formatted_line;
+        if (line == 0 && warning.location.valid()) {
+          line = ctx.source_manager().getLineNumber(warning.location);
+        }
+        std::string construct =
+            warning.construct.empty() ? warning.code : warning.construct;
+        items.emplace_back(std::move(construct), line);
+      }
+      std::vector<format::summary::FileReport> reports;
+      reports.push_back(
+          format::summary::makeFileReport(run.stdin_name, std::move(items)));
+      format::summary::printSummary(std::cerr, reports,
+                                    {.inplace = false, .links = !run.no_links});
       return 0;
     }
 

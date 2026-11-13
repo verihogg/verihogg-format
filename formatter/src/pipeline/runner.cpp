@@ -8,8 +8,10 @@
 #include <fstream>
 #include <gsl/span>
 #include <mutex>
+#include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "data/format_style.h"
@@ -17,6 +19,7 @@
 #include "data/lex_context.h"
 #include "formatter.h"
 #include "pipeline/format_checker.h"
+#include "pipeline/summary.h"
 
 namespace format {
 
@@ -75,16 +78,40 @@ auto checkInParallel(gsl::span<const std::filesystem::path> files,
   return results;
 }
 
-}  // namespace
-
-auto printWarning(std::ostream& os, std::string_view path,
-                  const FormatWarning& warning) -> void {
-  os << "Warning";
-  if (!path.empty()) {
-    os << " in " << path;
+// Converts diagnostics of one file into (construct, line) pairs for the
+// summary aggregation.
+[[nodiscard]] auto toSummaryItems(LexContext& ctx,
+                                  const std::vector<FormatWarning>& warnings)
+    -> std::vector<std::pair<std::string, std::size_t>> {
+  std::vector<std::pair<std::string, std::size_t>> items;
+  items.reserve(warnings.size());
+  for (const auto& warning : warnings) {
+    std::size_t line = warning.formatted_line;
+    if (line == 0 && warning.location.valid()) {
+      line = ctx.source_manager().getLineNumber(warning.location);
+    }
+    std::string construct =
+        warning.construct.empty() ? warning.code : warning.construct;
+    items.emplace_back(std::move(construct), line);
   }
-  os << ": " << warning.message << " [" << warning.code << "]\n";
+  return items;
 }
+
+// Same as above, for callers without a LexContext (--check): relies on the
+// output line already being attached to the warning.
+[[nodiscard]] auto toSummaryItems(const std::vector<FormatWarning>& warnings)
+    -> std::vector<std::pair<std::string, std::size_t>> {
+  std::vector<std::pair<std::string, std::size_t>> items;
+  items.reserve(warnings.size());
+  for (const auto& warning : warnings) {
+    std::string construct =
+        warning.construct.empty() ? warning.code : warning.construct;
+    items.emplace_back(std::move(construct), warning.formatted_line);
+  }
+  return items;
+}
+
+}  // namespace
 
 auto runFormatter(gsl::span<const std::filesystem::path> files,
                   gsl::span<const FormatStyle> styles, const RunConfig& run,
@@ -92,11 +119,14 @@ auto runFormatter(gsl::span<const std::filesystem::path> files,
   if (run.check) {
     const auto results = checkInParallel(files, styles);
     int failed = 0;
+    bool has_warnings = false;
+    std::vector<summary::FileReport> reports;
+    reports.reserve(files.size());
     for (size_t i = 0; i < files.size(); ++i) {
       const auto& result = results.at(i);
-      for (const auto& warning : result.warnings) {
-        printWarning(*streams.err, files[i].string(), warning);
-      }
+      has_warnings = has_warnings || !result.warnings.empty();
+      reports.push_back(summary::makeFileReport(
+          files[i].string(), toSummaryItems(result.warnings)));
       switch (result.status) {
         case CheckStatus::kClean:
           break;
@@ -110,10 +140,17 @@ auto runFormatter(gsl::span<const std::filesystem::path> files,
           break;
       }
     }
+    if (has_warnings) {
+      summary::printSummary(
+          *streams.err, reports,
+          {.inplace = false, .links = !run.no_links, .file_status = false});
+    }
     return failed;
   }
 
   int warnings = 0;
+  std::vector<summary::FileReport> reports;
+  reports.reserve(files.size());
   for (size_t i = 0; i < files.size(); ++i) {
     const auto& path = files[i];
     LexContext ctx;
@@ -125,10 +162,9 @@ auto runFormatter(gsl::span<const std::filesystem::path> files,
     }
 
     auto result = format::format(tokens, styles[i], ctx.source_text());
-    for (const auto& warning : result.warnings) {
-      printWarning(*streams.err, path.string(), warning);
-      ++warnings;
-    }
+    warnings += static_cast<int>(result.warnings.size());
+    reports.push_back(summary::makeFileReport(
+        path.string(), toSummaryItems(ctx, result.warnings)));
 
     if (run.inplace) {
       writeFile(path, result.formatted_text);
@@ -136,6 +172,9 @@ auto runFormatter(gsl::span<const std::filesystem::path> files,
       *streams.out << result.formatted_text;
     }
   }
+
+  summary::printSummary(*streams.err, reports,
+                        {.inplace = run.inplace, .links = !run.no_links});
   return warnings;
 }
 }  // namespace format

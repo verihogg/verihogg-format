@@ -26,6 +26,9 @@ struct UnwrappedLine {
   std::vector<Token> tokens{};
   std::string raw_text;
   bool is_opaque = false;
+  // Byte offset of raw_text in the original source (opaque lines only).
+  // Lets the printer map diagnostics inside verbatim regions to output lines.
+  std::optional<size_t> source_offset = std::nullopt;
 
   IndentLevel indentation_spaces = 0;
   // Syntactic nesting survives even when the style prints no indentation.
@@ -53,6 +56,7 @@ struct UnwrappedLine {
         .tokens = std::move(tokens),
         .raw_text = std::move(this->raw_text),
         .is_opaque = this->is_opaque,
+        .source_offset = this->source_offset,
         .indentation_spaces = this->indentation_spaces,
         .nesting_level = this->nesting_level,
         .is_fallback = this->is_fallback,
@@ -74,6 +78,7 @@ struct UnwrappedLine {
         .tokens = std::move(tokens),
         .raw_text = this->raw_text,
         .is_opaque = this->is_opaque,
+        .source_offset = this->source_offset,
         .indentation_spaces = this->indentation_spaces,
         .nesting_level = this->nesting_level,
         .is_fallback = this->is_fallback,

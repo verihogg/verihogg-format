@@ -35,6 +35,12 @@ auto FormatChecker::checkFile(const fs::path& path) const -> CheckResult {
   LexContext ctx;
   auto tokens = ctx.lex_string(original);
   auto result = format::format(tokens, style_, ctx.source_text());
+  for (auto& warning : result.warnings) {
+    if (warning.formatted_line == 0 && warning.location.valid()) {
+      warning.formatted_line =
+          ctx.source_manager().getLineNumber(warning.location);
+    }
+  }
 
   CheckResult check{.status = result.formatted_text == original
                                   ? CheckStatus::kClean

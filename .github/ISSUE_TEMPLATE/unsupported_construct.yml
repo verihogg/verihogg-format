@@ -1,0 +1,59 @@
+name: Unsupported construct
+description: The formatter left a region unchanged because it does not support a SystemVerilog construct yet.
+title: "Unsupported construct: "
+labels: ["unsupported-construct"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve verihogg-format! The fields below may be
+        pre-filled from your run — please review them and edit where needed.
+
+        1. **Search the existing issues** for a similar report first.
+        2. Add a **short** code example: paste the fragment from the file that
+           was processed (a few lines around the construct is enough).
+        3. Do **not** paste confidential or proprietary code.
+  - type: textarea
+    id: constructs
+    attributes:
+      label: Unsupported constructs (pre-filled)
+      description: Aggregated list of constructs the formatter could not handle, with occurrence counts.
+      placeholder: |
+        - <construct>  x<count>
+    validations:
+      required: false
+  - type: textarea
+    id: example
+    attributes:
+      label: Code example
+      description: A minimal snippet that reproduces the unsupported construct — paste the relevant fragment of the processed file here.
+      placeholder: |
+        module example;
+          // your snippet here
+        endmodule
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Formatter version and OS (shown in the pre-filled report).
+      placeholder: |
+        verihogg-format 0.1.0
+        OS: Linux
+    validations:
+      required: false
+  - type: checkboxes
+    id: search
+    attributes:
+      label: Duplicate check
+      options:
+        - label: I have searched existing issues and did not find a duplicate of this report.
+          required: true
+  - type: checkboxes
+    id: confidentiality
+    attributes:
+      label: Confidentiality
+      options:
+        - label: I have removed any confidential or proprietary code from this report.
+          required: true

@@ -1033,6 +1033,7 @@ auto TokenAnnotator::annotateWithDiagnostics(
           .code = "invalid-annotation",
           .message = "cannot annotate SystemVerilog line (" + failure->reason +
                      "); original text preserved",
+          .construct = failure->reason,
       });
     }
   }
@@ -1081,6 +1082,7 @@ auto TokenAnnotator::annotateWithDiagnostics(
           .raw_text = std::string(
               original_source.substr(source_cursor, raw_end - source_cursor)),
           .is_opaque = true,
+          .source_offset = source_cursor,
           .case_label_colon = std::nullopt,
       });
     }

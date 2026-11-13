@@ -4,6 +4,7 @@
 #include <slang/parsing/TokenKind.h>
 
 #include <algorithm>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <string_view>
@@ -23,6 +24,14 @@ struct CompletedLine {
   bool accepts_trailing_comment = false;
   bool exact = false;
   bool append_terminator = true;
+  // Source offset of the first token printed on this line (opaque lines: the
+  // start of the verbatim region). Drives the diagnostic line mapping.
+  std::optional<std::size_t> source_offset = std::nullopt;
+};
+
+struct BuiltOutput {
+  std::string text;
+  std::vector<SourceOutputAnchor> anchors;
 };
 
 class PrintState {
@@ -40,7 +49,11 @@ class PrintState {
 
   auto appendRaw(std::string_view text) -> void { current_.append(text); }
 
-  auto appendToken(std::string_view text) -> void {
+  auto appendToken(std::string_view text,
+                   std::optional<std::size_t> source_offset) -> void {
+    if (!current_anchor_.has_value() && source_offset.has_value()) {
+      current_anchor_ = source_offset;
+    }
     current_.append(text);
     current_has_code_ = true;
   }
@@ -55,15 +68,17 @@ class PrintState {
     lines_.push_back(CompletedLine{
         .text = std::move(current_),
         .accepts_trailing_comment = current_has_code_ && !preserve_source_break,
+        .source_offset = current_anchor_,
     });
     current_.clear();
     current_has_code_ = false;
+    current_anchor_.reset();
   }
 
   auto appendPreservedText(std::string_view text) -> void {
     while (!text.empty()) {
       const auto end = text.find_first_of("\r\n");
-      appendToken(text.substr(0, end));
+      appendToken(text.substr(0, end), std::nullopt);
       if (end == std::string_view::npos) {
         return;
       }
@@ -83,14 +98,16 @@ class PrintState {
     }
   }
 
-  auto appendOpaque(std::string_view source) -> void {
+  auto appendOpaque(std::string_view source,
+                    std::optional<std::size_t> source_offset) -> void {
     finishLineIfNeeded();
     if (!lines_.empty() && !lines_.back().exact) {
       lines_.back().append_terminator = false;
     }
     lines_.push_back(CompletedLine{.text = std::string(source),
                                    .exact = true,
-                                   .append_terminator = false});
+                                   .append_terminator = false,
+                                   .source_offset = source_offset});
   }
 
   auto addBlankLine() -> void {
@@ -141,6 +158,7 @@ class PrintState {
     }
     current_ = std::move(lines_.back().text);
     current_has_code_ = true;
+    current_anchor_ = lines_.back().source_offset;
     lines_.pop_back();
     appendRaw(spaces_before);
     appendPreservedText(comment.getRawText());
@@ -189,21 +207,51 @@ class PrintState {
     return last != '\n' && last != '\r';
   }
 
-  [[nodiscard]] auto build() const -> std::string {
+  [[nodiscard]] auto build() const -> BuiltOutput {
     size_t size = 0;
     for (const auto& line : lines_) {
       size +=
           line.text.size() + (line.append_terminator ? line_ending_.size() : 0);
     }
 
-    std::string output;
-    output.reserve(size);
+    BuiltOutput output;
+    output.text.reserve(size);
+    output.anchors.reserve(lines_.size());
+
+    // Physical output line the next completed line will start on.
+    size_t output_line = 1;
     for (const auto& line : lines_) {
-      output.append(line.text);
+      if (line.source_offset.has_value()) {
+        const std::size_t start = *line.source_offset;
+        output.anchors.push_back(
+            {.source_offset = start, .output_line = output_line});
+        // Verbatim regions keep the original physical line structure, so every
+        // source line inside them gets its own anchor.
+        if (line.exact) {
+          size_t sub_line = output_line;
+          size_t pos = line.text.find('\n');
+          while (pos != std::string::npos && pos + 1 < line.text.size()) {
+            ++sub_line;
+            output.anchors.push_back(
+                {.source_offset = start + pos + 1, .output_line = sub_line});
+            pos = line.text.find('\n', pos + 1);
+          }
+        }
+      }
+
+      output.text.append(line.text);
+      output_line += static_cast<size_t>(
+          std::count(line.text.begin(), line.text.end(), '\n'));
       if (line.append_terminator) {
-        output.append(line_ending_);
+        output.text.append(line_ending_);
+        ++output_line;
       }
     }
+
+    std::ranges::stable_sort(output.anchors, [](const SourceOutputAnchor& lhs,
+                                                const SourceOutputAnchor& rhs) {
+      return lhs.source_offset < rhs.source_offset;
+    });
     return output;
   }
 
@@ -228,6 +276,8 @@ class PrintState {
   std::vector<CompletedLine> lines_;
   std::string current_;
   bool current_has_code_ = false;
+  // Source offset of the first token appended to the line being built.
+  std::optional<std::size_t> current_anchor_;
 };
 
 struct TriviaEffect {
@@ -428,7 +478,7 @@ auto printLine(const UnwrappedLine<FormatToken>& line, PrintState& state,
       state.appendRaw(trivia.spaces_after_inline_comments);
     }
 
-    state.appendToken(ft.token.rawText());
+    state.appendToken(ft.token.rawText(), ft.token.location().offset());
   }
 
   state.finishLineIfNeeded();
@@ -436,17 +486,33 @@ auto printLine(const UnwrappedLine<FormatToken>& line, PrintState& state,
 
 }  // namespace
 
+auto mapToOutputLine(const std::vector<SourceOutputAnchor>& anchors,
+                     std::size_t source_offset) -> std::size_t {
+  const auto it =
+      std::partition_point(anchors.begin(), anchors.end(),
+                           [source_offset](const SourceOutputAnchor& anchor) {
+                             return anchor.source_offset < source_offset;
+                           });
+  if (it == anchors.end()) {
+    return anchors.empty() ? 0 : anchors.back().output_line;
+  }
+  if (it->source_offset == source_offset || it == anchors.begin()) {
+    return it->output_line;
+  }
+  return std::prev(it)->output_line;
+}
+
 Printer::Printer(const FormatStyle& style)
     : line_ending_(resolveLineEnding(style)) {}
 
 auto Printer::print(const std::vector<UnwrappedLine<FormatToken>>& lines,
-                    std::ostream& os) const -> void {
+                    std::ostream& os) const -> std::vector<SourceOutputAnchor> {
   PrintState state(line_ending_);
 
   bool after_opaque = false;
   for (const auto& line : lines) {
     if (line.is_opaque) {
-      state.appendOpaque(line.raw_text);
+      state.appendOpaque(line.raw_text, line.source_offset);
       after_opaque = true;
       continue;
     }
@@ -454,7 +520,9 @@ auto Printer::print(const std::vector<UnwrappedLine<FormatToken>>& lines,
     after_opaque = false;
   }
 
-  os << state.build();
+  BuiltOutput output = state.build();
+  os << output.text;
+  return output.anchors;
 }
 
 }  // namespace format

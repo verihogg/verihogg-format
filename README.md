@@ -2,433 +2,233 @@
 
 [![CMake Build](https://github.com/verihogg/verihogg-format/actions/workflows/build.yml/badge.svg)](https://github.com/verihogg/verihogg-format/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![GitHub release](https://img.shields.io/github/v/release/verihogg/verihogg-format?include_prereleases&sort=semver)](https://github.com/verihogg/verihogg-format/releases)
 
-**verihogg-format** is a code formatter for SystemVerilog (IEEE 1800-2017) that automatically reformats source code: indentation, spacing, and tabular alignment of ports and declarations.
+**verihogg-format** formats SystemVerilog source files. It adjusts indentation and spacing, aligns groups such as module ports, joins short statements where they fit, and searches for line breaks around a configurable column target. It can print a preview, rewrite files, or check formatting in CI.
 
-> **Note:** Automatic line wrapping (breaking long lines to fit within the column limit) is not yet implemented — it is the next major feature on the roadmap.
-
-> **Status:** This tool is under active development. It handles common SystemVerilog patterns but may produce unexpected formatting on some constructs. If you encounter such a case, please [open an issue](https://github.com/verihogg/verihogg-format/issues) with a minimal example.
-
-## Table of contents
-
-- [Features](#features)
-- [Example](#example)
-- [Quick start](#quick-start)
-- [Command-line options](#command-line-options)
-- [Configuration file](#configuration-file)
-- [Usage](#usage)
-  - [Docker (recommended)](#docker-recommended)
-  - [Build from source with Nix](#build-from-source-with-nix)
-  - [Build from source with CMake](#build-from-source-with-cmake)
-- [Project structure](#project-structure)
-- [Testing](#testing)
-- [Contributing](#contributing)
-- [License](#license)
-
----
-
-## Features
-
-**Implemented**
-
-- Basic indentation with a configurable number of spaces
-- Tabular alignment of port lists and declarations
-- YAML configuration file support (`.verihogg-format.yaml`, validated against a JSON Schema)
-- Docker image published to GitHub Container Registry
-- Nix build for reproducible environments
-
-**Planned**
-
-- Automatic line wrapping (breaking long lines to fit the column limit)
-- Formatting of comments
-- Predefined formatting styles (e.g. SCR1, UVM, custom profiles)
-
----
-
-## Example
-
-The fragment below is from the ALU module of the open-source [SCR1](https://github.com/syntacore/scr1) RISC-V core by Syntacore.
-
-**Before**
-
-```verilog
-module scr1_pipe_ialu #(parameter SCR1_XLEN = 32)(
-input logic clk,input logic rst_n,
-input  logic [SCR1_XLEN-1:0]  main_op1,
-input logic[SCR1_XLEN-1:0] main_op2,
-input  type_scr1_ialu_cmd_e   cmd,
-output logic[SCR1_XLEN-1:0] result,
-output logic cmp_res
-);
-
-always_comb begin
-  result='0;
-  if(cmd==SCR1_IALU_CMD_AND)
-    result=main_op1&main_op2;
-  else if(cmd==SCR1_IALU_CMD_OR)
-    result=main_op1|main_op2;
-end
-```
-
-**After**
-
-```verilog
-module scr1_pipe_ialu #(parameter SCR1_XLEN = 32) (
-input     logic                        clk,
-input     logic                        rst_n,
-input     logic [SCR1_XLEN - 1 : 0]    main_op1,
-input     logic [SCR1_XLEN - 1 : 0]    main_op2,
-input     type_scr1_ialu_cmd_e         cmd,
-output    logic [SCR1_XLEN - 1 : 0]    result,
-output    logic                        cmp_res
-);
-  always_comb
-    begin
-      result = '0;
-      if (cmd == SCR1_IALU_CMD_AND)
-        result = main_op1 & main_op2;
-      else if (cmd == SCR1_IALU_CMD_OR)
-        result = main_op1 | main_op2;
-    end
-```
-
----
-
-## Line joining
-
-A control header and one simple unbraced body can share a line when they fit
-within the column limit, including indentation. Fitting `else if` and `else`
-branches may join the same line. Joining preserves token order and bracket
-links. Structural nesting is independent of the configured indentation width.
-
-Blocks, nested control statements, comments, blank lines, directives, mandatory
-breaks and fallback partitions prevent joining. This stage does not insert or
-remove `begin` / `end`, parse macro expansions or normalize literals. The width
-check applies to joining; subsequent alignment and wrapping are separate stages.
+The formatter is under active development. It recognizes common source patterns but does not cover the full SystemVerilog language. When it cannot safely format a region, it reports a warning and preserves the original text where possible.
 
 ## Quick start
 
-```bash
-# Format a single file and print to stdout
-docker run --rm -v "$(pwd)":/data -w /data \
-  ghcr.io/verihogg/verihogg-format:latest \
-  verihogg-format file.sv
-
-# Format in place
-docker run --rm -v "$(pwd)":/data -w /data \
-  ghcr.io/verihogg/verihogg-format:latest \
-  verihogg-format --inplace file.sv
-```
-
----
-
-## Command-line options
-
-| Option                              | Description                                                    |
-| ----------------------------------- | -------------------------------------------------------------- |
-| `--check`                           | Check without writing files; incompatible with `--inplace`.    |
-| `-n, --inplace`                     | Overwrite source files instead of printing to stdout.          |
-| `-c, --column_limit N`              | Maximum line length (default: `100`).                          |
-| `-i, --indentation_spaces N`        | Spaces per indent level (default: `2`).                        |
-| `-w, --wrap_spaces N`               | Extra indent for wrapped lines (default: `4`).                 |
-| `-b, --line_break_penalty N`        | Penalty for breaking a line (default: `2`).                    |
-| `-p, --over_column_limit_penalty N` | Penalty per character over the column limit (default: `100`).  |
-| `-t, --line_terminator MODE`        | Line ending style: `auto` \| `lf` \| `crlf` (default: `auto`). |
-| `--config PATH`                     | Use this configuration file instead of searching for one.      |
-| `-h, --help`                        | Show help and exit.                                            |
-
-### Reserved style options (not yet implemented)
-
-The basic formatting options in the preceding table are implemented.
-`line_terminator: auto` currently emits LF; detecting line endings from the
-input is not implemented yet.
-
-All options in the table below are accepted by the CLI and configuration loader
-and stored in `FormatStyle`, but **have no effect on formatting yet**. In
-particular, `try_wrap_long_lines` does not control line wrapping: the formatter
-currently always runs the line-wrap search.
-
-Every option below mirrors a key of the configuration file. A value passed on
-the command line overrides the value stored from the configuration file.
-
-| Option                                                | Description                                                                   |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `--port_declarations_alignment MODE`                  | Alignment of port direction, type, dimensions and name.                       |
-| `--module_net_variable_alignment MODE`                | Alignment of net and variable declarations inside blocks.                     |
-| `--assignment_statement_alignment MODE`               | Alignment of assignment statements.                                           |
-| `--formal_parameters_alignment MODE`                  | Alignment of formal parameters in module, interface and class headers.        |
-| `--named_parameter_alignment MODE`                    | Alignment of named parameters in instantiations.                              |
-| `--named_port_alignment MODE`                         | Alignment of named port connections.                                          |
-| `--parameter_declaration_alignment MODE`              | Alignment of parameter and localparam declarations in block bodies.           |
-| `--case_items_alignment MODE`                         | Alignment of case item labels.                                                |
-| `--enum_assignment_statement_alignment MODE`          | Alignment of enum elements with assignments.                                  |
-| `--struct_union_members_alignment MODE`               | Alignment of struct and union members.                                        |
-| `--class_member_variable_alignment MODE`              | Alignment of class member variables.                                          |
-| `--distribution_items_alignment MODE`                 | Alignment of distribution items.                                              |
-| `--port_declarations_indentation MODE`                | Indentation of ports in a module or interface header.                         |
-| `--formal_parameters_indentation MODE`                | Indentation of formal parameters in a header.                                 |
-| `--named_parameter_indentation MODE`                  | Indentation of named parameters in an instantiation.                          |
-| `--named_port_indentation MODE`                       | Indentation of named ports in an instantiation.                               |
-| `--alignment_group_boundary RULE`                     | Rule determining where an alignment group ends.                               |
-| `--port_declarations_right_align_packed_dimensions`   | Right-align packed dimensions in port declarations (default: `false`).        |
-| `--port_declarations_right_align_unpacked_dimensions` | Right-align unpacked dimensions in port declarations (default: `false`).      |
-| `--compact_indexing_and_selections`                   | Use compact expressions inside indexes and selections (default: `true`).      |
-| `--class_parameter_space`                             | Insert a space before `#` in parameterized class typedefs (default: `false`). |
-| `--expand_coverpoints`                                | Always expand coverpoints (default: `false`).                                 |
-| `--try_wrap_long_lines`                               | Allow optimization-based wrapping of long lines (default: `false`).           |
-| `--wrap_end_else_clauses`                             | Place `end` and `else` clauses on separate lines (default: `false`).          |
-
-For an alignment option `MODE` is one of `align`, `flush-left`, `preserve` or
-`infer` (default: `infer`).
-For an indentation option it is `indent` or `wrap` (default: `wrap`).
-`RULE` is one of `none`, `blank-lines`, `separator-comments`
-or `blank-lines-and-separator-comments` (default: `none`).
-
-Each boolean flag also has a `--no_<name>` counterpart that sets it to `false`,
-so a value coming from the configuration file can be turned off again:
+Use the published Docker image from a SystemVerilog project directory:
 
 ```sh
-formatter --no_compact_indexing_and_selections src/*.sv
+# Preview a file on stdout; diagnostics go to stderr.
+docker run --rm -v "$(pwd)":/data -w /data \
+  ghcr.io/verihogg/verihogg-format:latest \
+  verihogg-format rtl/alu.sv
+
+# Rewrite a file in place.
+docker run --rm -v "$(pwd)":/data -w /data \
+  ghcr.io/verihogg/verihogg-format:latest \
+  verihogg-format --inplace rtl/alu.sv
 ```
 
-### Exit codes
+With a local build, use `build/bin/verihogg-format` in place of `verihogg-format` in the commands below.
 
-| Code | Meaning                                                      |
-| ---- | ------------------------------------------------------------ |
-| `0`  | Formatting complete, or all checked files match the style.   |
-| `1`  | Error, or a checked file needs formatting or cannot be read. |
+## Formatting examples
 
----
+### Ports and expressions
 
-## Configuration file
+Input:
 
-Options can be stored in a YAML configuration file named `.verihogg-format.yaml`
-(or `.verihogg-format.yml`). The file is searched upwards starting from the
-directory of each input file; for stdin, the search starts in the current
-working directory. `--config PATH` loads a specific file instead of searching.
-
-```yaml
-version: "0.1.0"
-column_limit: 120
-indentation_spaces: 4
-line_terminator: lf
-port_declarations_alignment: flush-left
+```systemverilog
+module arithmetic(input logic [31:0] left,input logic[31:0] right,output logic[31:0] result);
+assign result=left+right;
+endmodule
 ```
 
-`version` is required and must be `"0.1.0"`; all other keys are optional. Values
-are resolved in this order (later wins):
+Output with the default style:
 
-1. built-in defaults,
-2. the selected `style` profile (reserved; see below),
-3. values from the configuration file,
-4. command-line options.
+```systemverilog
+module arithmetic (
+  input   logic [31:0]        left,
+  input   logic [31:0]        right,
+  output  logic [31:0]        result
+);
+  assign result = left + right;
+endmodule
+```
 
-Named style profiles are **not implemented yet**. The `style` key accepts
-`default`, `lowrisc` and `scr1`, but all three currently use the built-in defaults.
-The reserved options listed above are validated and loaded, but do not affect
-the formatter output.
+### A narrower column target
 
-The YAML validator accepts scalar values that can be converted to the declared
-type, including quoted integers and booleans (for example, `column_limit: "120"`).
-Enum values and numeric limits are still checked.
+Input:
 
-The file is validated against
-[`schemas/verihogg-format.schema.json`](schemas/verihogg-format.schema.json):
-unknown keys and invalid values are rejected with a `path:line:column` message.
-Editors can pick up the same schema when the file references it:
+```systemverilog
+module demo(input logic clk,input logic[7:0] a,output logic[7:0] y);
+always_comb begin
+if(a==8'h00) y=8'hff;
+else y=a+8'h01;
+end
+endmodule
+```
+
+Output with `--column_limit 40`:
+
+```systemverilog
+module demo (
+  input   logic              clk,
+  input   logic [7:0]        a,
+  output  logic [7:0]        y
+);
+  always_comb begin
+    if (a == 8'h00) y = 8'hff;
+    else y = a + 8'h01;
+  end
+endmodule
+```
+
+The column limit is a layout target, not a guarantee: an unbreakable token or a preserved region can still exceed it. At the default limit of 100, both branches in this example fit together on one line: `if (a == 8'h00) y = 8'hff; else y = a + 8'h01;`.
+
+## Command-line use
+
+| Command | Result |
+| --- | --- |
+| `verihogg-format rtl/alu.sv` | Print formatted source to stdout; leave the file untouched. |
+| `verihogg-format --inplace rtl/alu.sv` | Replace the file with formatted source. |
+| `verihogg-format --check rtl/alu.sv` | Compare the file with formatted output without writing it; useful in CI. |
+| `verihogg-format < rtl/alu.sv` | Read from stdin and print to stdout. |
+| `verihogg-format --no-links rtl/alu.sv` | Omit GitHub issue links from the diagnostic summary. |
+
+Multiple file paths are accepted. In preview mode their formatted contents are written consecutively to stdout, without file separators; use `--inplace` or `--check` when processing many files independently. `--check` requires file paths and cannot be combined with `--inplace`.
+
+`--check` writes nothing to stdout. It exits with **0** when all supplied files already match the formatter output, and **1** if a file needs formatting, cannot be read, or another error occurs. Normal preview and in-place runs return **0** even when they report unsupported constructs; an execution error returns **1**.
+
+If an input path cannot be found, `--check` reports the error and continues checking the other matched files; the final exit code is still **1**.
+
+### Diagnostics and issue links
+
+Normal preview and in-place runs write a status line for each processed file to stderr. When there are formatter warnings, an end-of-run summary groups them by construct and file, shows occurrence counts, and points to the first relevant line **in the formatted output**. For example:
+
+```text
+verihogg-format: rtl/demo.sv processed (some regions left unchanged).
+
+...
+  - covergroup  1 occurrence, first at demo.sv:5
+```
+
+If multiple reported files with warnings share a basename, the summary keeps their full paths in locations such as `first at /project/rtl/demo.sv:5` to distinguish them.
+
+The summary also offers pre-filled GitHub issue links for unsupported constructs and incorrect formatting. In normal preview and in-place runs, the incorrect-formatting link is shown even when there are no warnings, because a user may still notice a formatting mistake. `--no-links` removes the links and their explanatory text while retaining status and warning information. It works in `--check` mode too. Do not include private source code in an issue without reviewing it first.
+
+`--check` prints `Needs formatting: <path>` for files that differ and errors for unreadable files. When there are formatter warnings, it also prints the grouped summary and issue links, without the per-file `processed` or `written` status lines. Without warnings, it omits the summary and links. Summary line numbers refer to the formatted output that would be produced, even though files are not rewritten. The return code depends on whether files match the formatter output and whether errors occurred, not on the number of warnings.
+
+## Formatting options
+
+These options affect the current formatter:
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `-c, --column_limit N` | `100` | Target output width. |
+| `-i, --indentation_spaces N` | `2` | Spaces per nesting level. |
+| `-w, --wrap_spaces N` | `4` | Extra indentation for continuation lines. |
+| `-b, --line_break_penalty N` | `2` | Cost of adding a line break in layout search. |
+| `-p, --over_column_limit_penalty N` | `100` | Overflow penalty used by layout search. |
+| `-t, --line_terminator MODE` | `auto` | `auto`, `lf`, or `crlf`. Currently `auto` emits LF. |
+| `--config PATH` | automatic search | Load one specific YAML configuration file. |
+| `-n, --inplace` | off | Rewrite input files. |
+| `--check` | off | Check without rewriting input files. |
+| `--no-links` | off | Hide GitHub issue links in the diagnostic summary, including in `--check`. |
+| `--wrap_end_else_clauses` | off | Put a block-closing `end` and the following `else` on separate lines. |
+
+The formatter currently runs its line-wrap search regardless of the reserved `try_wrap_long_lines` setting. Comments and unsupported regions are preserved rather than reflowed into a new comment style.
+
+The CLI and schema also accept **reserved style options** that are validated and stored but do not yet change output. They include per-context alignment (`port_declarations_alignment`, `assignment_statement_alignment`, and the other `*_alignment` options), per-context indentation (`*_indentation`), `alignment_group_boundary`, and the boolean options `port_declarations_right_align_packed_dimensions`, `port_declarations_right_align_unpacked_dimensions`, `compact_indexing_and_selections`, `class_parameter_space`, `expand_coverpoints`, and `try_wrap_long_lines`. See `verihogg-format --help` and the [configuration schema](schemas/verihogg-format.schema.json) for the complete list and allowed values. Boolean style options, including `wrap_end_else_clauses`, have a `--no_<name>` form to override a true value from a config file.
+
+## Configuration
+
+Place `.verihogg-format.yaml` or `.verihogg-format.yml` in a project directory:
 
 ```yaml
 $schema: "https://raw.githubusercontent.com/verihogg/verihogg-format/main/schemas/verihogg-format.schema.json"
 version: "0.1.0"
-column_limit: 120
+column_limit: 80
+indentation_spaces: 4
+line_terminator: lf
 ```
 
----
+`version: "0.1.0"` is required. All other fields are optional. The formatter searches upward from each input file's directory; for stdin it searches from the current working directory. `--config PATH` selects a file explicitly. Values are applied in this order, with later values taking precedence: built-in defaults, named style profile, YAML file, CLI overrides. Different input files can therefore use different nearby config files in the same command.
 
-## Usage
+The config is checked against the [JSON Schema](schemas/verihogg-format.schema.json), which is embedded in the binary. Unknown keys and invalid values produce an error with file and source position. The `style` key accepts `default`, `lowrisc`, and `scr1`, but these profiles currently have the same defaults; the latter two are not tuned presets yet. Reserved style options are accepted in YAML as well as on the CLI but currently have no effect on formatting.
 
-Check formatting without changing files:
+## How it works and current limits
 
-```bash
-verihogg-format --check file.sv
-```
+The pipeline lexes source with [slang](https://github.com/MikePopoloski/slang), normalizes tokens, forms structural lines, annotates spacing, assigns layout policies, joins eligible short lines, aligns groups, searches for line breaks, and prints the result. The formatter works on source text; it does not elaborate or compile a design.
 
-Check mode requires input files and uses the resolved configuration and CLI
-style overrides for each file. It prints diagnostics to stderr, writes nothing
-to stdout, and exits with 0 when all files match or 1 when a file needs
-formatting or cannot be read. Formatter warnings are also reported. Files are
-checked in parallel; diagnostics follow the input file order.
+- The column limit is a soft target. Line wrapping and alignment may still leave long lines.
+- Short control-flow bodies can join their headers when they fit. Blocks, directives, comments, and required breaks keep separate lines.
+- Unsupported syntax can leave a region byte-for-byte as written while surrounding supported code is reformatted. Review warnings and output before applying large in-place edits.
+- `line_terminator: auto` currently emits LF. Choose `crlf` explicitly when needed.
+- The formatter does not reflow comment text or implement the reserved style controls listed above.
 
-### Docker (recommended)
+If formatting changes code unexpectedly, use the incorrect-formatting issue link printed by the CLI or open an [issue](https://github.com/verihogg/verihogg-format/issues/new/choose) with a small input, actual output, and expected output.
 
-The prebuilt image is published to GitHub Container Registry at `ghcr.io/verihogg/verihogg-format` and is updated on every push to `main`.
+## Installation and development
 
-Navigate to your SystemVerilog project directory, then run:
+### Docker
 
-#### Single file
+The image is published as `ghcr.io/verihogg/verihogg-format:latest` after successful builds on `main`. Mount the directory containing the files and set it as the container working directory:
 
-```bash
+```sh
 docker run --rm -v "$(pwd)":/data -w /data \
   ghcr.io/verihogg/verihogg-format:latest \
-  verihogg-format file.sv
+  verihogg-format --check rtl/alu.sv
 ```
 
-#### In-place formatting
+### Nix
 
-```bash
-docker run --rm -v "$(pwd)":/data -w /data \
-  ghcr.io/verihogg/verihogg-format:latest \
-  verihogg-format --inplace file.sv
-```
+The flake pins dependencies, including the SCR1 source used by integration tests:
 
-#### Multiple files
-
-```bash
-docker run --rm -v "$(pwd)":/data -w /data \
-  ghcr.io/verihogg/verihogg-format:latest \
-  verihogg-format file1.sv file2.sv file3.sv
-```
-
-#### All `.sv` files in the current directory
-
-```bash
-docker run --rm -v "$(pwd)":/data -w /data \
-  ghcr.io/verihogg/verihogg-format:latest \
-  sh -c 'verihogg-format --inplace *.sv'
-```
-
----
-
-### Build from source with Nix
-
-Nix pins all dependencies and produces a reproducible binary.
-
-```bash
+```sh
 git clone https://github.com/verihogg/verihogg-format.git
 cd verihogg-format
-nix-build
+nix build
+./result/bin/verihogg-format --help
 ```
 
-This creates a `result` symlink. The binary is at `./result/bin/verihogg-format`.
+Use `nix develop` for a development shell with build tools and clang tools. The repository also provides `default.nix` and `shell.nix` for `nix-build` and `nix-shell`.
 
-#### Development shell
+### CMake
 
-```bash
-nix-shell
-```
+You need a C++20 compiler, CMake 3.20+, and the development packages for [slang](https://github.com/MikePopoloski/slang), [Microsoft GSL](https://github.com/microsoft/GSL), [CLI11](https://github.com/CLIUtils/CLI11), [yaml-cpp](https://github.com/jbeder/yaml-cpp), and [valijson](https://github.com/tristanpenman/valijson). CMake also finds the platform thread library. Depending on your package layout, set `CMAKE_PREFIX_PATH` or the corresponding `*_DIR` variables.
 
-The development shell includes clang-tools (`clang-format`, `clang-tidy`) in addition to all build dependencies.
+To build only the formatter executable, without discovering Google Test:
 
-#### Running the local build
-
-```bash
-# Print formatted output to stdout
-./result/bin/verihogg-format mymodule.sv
-
-# In-place formatting
-./result/bin/verihogg-format --inplace mymodule.sv
-```
-
----
-
-### Build from source with CMake
-
-If you are not using Nix, install the following dependencies manually:
-
-- C++20-compatible compiler
-- CMake 3.20+
-- [slang](https://github.com/MikePopoloski/slang) — SystemVerilog parser
-- [CLI11](https://github.com/CLIUtils/CLI11) — command-line parser
-- [yaml-cpp](https://github.com/jbeder/yaml-cpp) — YAML parser (configuration files)
-- [valijson](https://github.com/tristanpenman/valijson) — JSON Schema validation (configuration files)
-- [Microsoft GSL](https://github.com/microsoft/GSL) — Guidelines Support Library
-- Google Test (optional, required for tests)
-
-Build:
-
-```bash
-cmake -B build
+```sh
+cmake -S . -B build -DCMAKE_DISABLE_FIND_PACKAGE_GTest=TRUE
 cmake --build build
+./build/bin/verihogg-format --help
 ```
 
-The binary is placed at `build/bin/verihogg-format`.
+If Google Test is installed and enabled, CMake requires `SCR1_ROOT` to point to a local [SCR1](https://github.com/syntacore/scr1) checkout. Set it when configuring, then run the unit and integration tests:
 
----
-
-## Project structure
-
-```
-.
-├── formatter/
-│   ├── include/            # Public headers
-│   │   ├── cli/            # CLI argument binding (format_args.h)
-│   │   ├── config/         # Configuration file loading (config_loader.h)
-│   │   ├── data/           # Core data structures (format_style.h, unwrapped_line.h, format_token.h, lex_context.h)
-│   │   ├── pipeline/       # Pipeline stage interfaces (tree_unwrapper.h, token_annotator.h,
-│   │   │                   #   tabular_aligner.h, line_wrap_searcher.h, printer.h, runner.h)
-│   │   └── formatter.h     # Top-level formatter interface
-│   ├── src/
-│   │   ├── config/         # Configuration file loading and validation
-│   │   ├── data/           # Data structure implementations
-│   │   ├── pipeline/       # Pipeline stage implementations
-│   │   ├── formatter.cpp
-│   │   └── main.cpp
-│   └── tests/              # GTest-based unit and integration tests
-│       ├── config_loader_test.cpp
-│       ├── format_args_test.cpp
-│       ├── printer_test.cpp
-│       ├── scr1_tests.cpp
-│       ├── tabular_align_test.cpp
-│       └── test_tree_unwrapper.cpp
-├── schemas/                # JSON Schema for the configuration file
-├── scripts/
-│   ├── check-format.sh
-│   ├── format.sh
-│   └── lint.sh
-├── nix/
-│   └── shared.nix          # Shared dependencies for Nix expressions
-├── build.nix               # Nix derivation
-├── default.nix             # Entry point — imports build.nix
-├── shell.nix               # Nix development shell
-├── Dockerfile              # Multi-stage Docker build via nix-build
-└── CMakeLists.txt
-```
-
----
-
-## Testing
-
-Tests use source files from the [SCR1](https://github.com/syntacore/scr1) RISC-V core project by Syntacore. The test suite includes:
-
-- **Unit tests** — `format_args_test.cpp` (CLI argument parsing), `printer_test.cpp` (formatting output), `tabular_align_test.cpp` (tabular alignment), `test_tree_unwrapper.cpp` (tree unwrapper)
-- **Integration tests** — `scr1_tests.cpp` (formats all SCR1 `.sv`/`.svh` files and verifies the syntax tree is preserved)
-
-The `SCR1_ROOT` environment variable (or CMake variable) must point to a local SCR1 checkout for the integration tests to run; they are skipped automatically if the path is absent.
-
-```bash
-cmake -B build -DSCR1_ROOT=/path/to/scr1
+```sh
+cmake -S . -B build -DCMAKE_DISABLE_FIND_PACKAGE_GTest=FALSE -DSCR1_ROOT=/path/to/scr1
 cmake --build build
-ctest --output-on-failure --test-dir build
+ctest --test-dir build --output-on-failure
 ```
 
-CI runs several checks on each push and pull request, including build, Docker image build, static analysis, and formatting.
+## Repository layout
 
----
+```text
+formatter/include/   Public formatter and pipeline interfaces
+formatter/src/       CLI, configuration loader, formatter pipeline
+formatter/tests/     Unit, CLI, and SCR1 integration tests
+schemas/             JSON Schema for YAML configuration
+scripts/             C++ formatting and lint helper scripts
+.github/workflows/   Build, formatting, lint, and Docker workflows
+.github/ISSUE_TEMPLATE/  GitHub issue forms used by CLI links
+flake.nix            Nix package and development shell
+default.nix          Compatibility entry point for nix-build
+shell.nix            Compatibility entry point for nix-shell
+Dockerfile           Docker image assembled from the Nix build
+```
 
 ## Contributing
 
-Contributions are welcome — bug reports, feature requests, and pull requests alike.
+Bug reports should include a minimal SystemVerilog input, the formatter output, and the expected result. The CLI's issue links pre-fill the formatter version, OS, and (for unsupported constructs) as many aggregated construct names as fit in the URL. Please remove any confidential source before submitting.
 
-1. Open an [issue](https://github.com/verihogg/verihogg-format/issues) to discuss bugs or ideas.
-2. Fork the repository and create a branch for your change.
-3. Add or update tests in `formatter/tests/`.
-4. Run `ctest --test-dir build` to verify everything passes.
-5. Open a pull request against `main`.
-
----
+For code changes, add or update tests in `formatter/tests/`, run `ctest --test-dir build --output-on-failure`, and open a pull request against `main`.
 
 ## License
 
-verihogg-format is licensed under the **MIT License**.
-See the [LICENSE](LICENSE) file for the full text.
+[MIT](LICENSE).

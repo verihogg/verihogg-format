@@ -9,6 +9,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "data/format_style.h"
 #include "pipeline/line_joiner.h"
@@ -36,10 +37,17 @@ auto format(gsl::span<const slang::parsing::Token> tokens, FormatStyle style,
   applyLineWraps(annotated.lines, style);
 
   std::ostringstream output;
-  Printer(style).print(annotated.lines, output);
+  const std::vector<SourceOutputAnchor> anchors =
+      Printer(style).print(annotated.lines, output);
   unwrapped.warnings.insert(unwrapped.warnings.end(),
                             std::make_move_iterator(annotated.warnings.begin()),
                             std::make_move_iterator(annotated.warnings.end()));
+  for (auto& warning : unwrapped.warnings) {
+    if (warning.location.valid()) {
+      warning.formatted_line =
+          mapToOutputLine(anchors, warning.location.offset());
+    }
+  }
   return FormatResult{.formatted_text = output.str(),
                       .warnings = std::move(unwrapped.warnings)};
 }
