@@ -1,0 +1,119 @@
+name: sv-tests report
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sv-tests-pages
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    env:
+      RUNNERS_FILTER: VerihoggFormat
+    steps:
+      - name: Checkout formatter
+        uses: actions/checkout@v6
+        with:
+          path: formatter
+
+      - name: Checkout sv-tests
+        uses: actions/checkout@v6
+        with:
+          repository: verihogg/sv-tests
+          # Replace with the merged runner-fix commit from develop before merge.
+          ref: eabb1204f2a3a23f51d0400a472e5d568a30b468
+          path: sv-tests
+
+      - name: Checkout report generators only
+        uses: actions/checkout@v6
+        with:
+          repository: verihogg/sv-tests-results
+          ref: 42feddf5c4055675d51b2fdf4cffc495f1660e4e
+          path: report-generators
+          sparse-checkout: |
+            /tools/sv_tests_unsupported_report.py
+            /tools/sv_tests_warning_constructs.py
+          sparse-checkout-cone-mode: false
+
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-venv libbit-vector-perl libjson-perl
+          python3 -m venv "$RUNNER_TEMP/sv-tests-venv"
+          "$RUNNER_TEMP/sv-tests-venv/bin/pip" install -r sv-tests/conf/requirements.txt
+          echo "$RUNNER_TEMP/sv-tests-venv/bin" >> "$GITHUB_PATH"
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+
+      - name: Build formatter and Slang
+        working-directory: formatter
+        run: |
+          nix build .#verihogg-format
+          mkdir -p "$GITHUB_WORKSPACE/runner-bin"
+          ln -s "$PWD/result/bin/verihogg-format" "$GITHUB_WORKSPACE/runner-bin/verihogg-format"
+          slang_store=$(nix build --no-link --print-out-paths --impure --expr \
+            '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.sv-lang')
+          ln -s "$slang_store/bin/slang" "$GITHUB_WORKSPACE/runner-bin/slang-driver"
+          echo "$GITHUB_WORKSPACE/runner-bin" >> "$GITHUB_PATH"
+
+      - name: Checkout test suites
+        working-directory: sv-tests
+        run: |
+          git submodule update --init --recursive --depth 1 third_party/tests third_party/cores
+          git submodule update --init --recursive --depth 1 third_party/tools/yosys
+          git submodule update --init --depth 1 third_party/tools/icarus
+
+      - name: Run sv-tests and generate pages
+        working-directory: sv-tests
+        env:
+          FORMATTER_SHA: ${{ github.sha }}
+          FORMATTER_REPOSITORY: ${{ github.repository }}
+        run: bash "$GITHUB_WORKSPACE/formatter/scripts/sv-tests-report.sh" "$GITHUB_WORKSPACE/report-generators/tools"
+
+      - name: Upload incomplete report for debugging
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sv-tests-incomplete-report
+          path: |
+            sv-tests/out/report/
+            sv-tests/out/logs/VerihoggFormat/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload report for inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: sv-tests-report
+          path: sv-tests/out/report/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Package Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: sv-tests/out/report/
+
+  deploy:
+    needs: report
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
