@@ -1,7 +1,9 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <string>
 #include <vector>
 
 #include "data/format_style.h"
@@ -18,6 +20,7 @@ enum class CheckStatus : uint8_t {
 struct CheckResult {
   CheckStatus status = CheckStatus::kClean;
   std::vector<FormatWarning> warnings{};
+  std::string diff{};
 };
 
 // Checks whether files are formatted according to the style without touching
@@ -26,8 +29,11 @@ class FormatChecker {
  public:
   explicit FormatChecker(const FormatStyle& style) : style_{style} {}
 
-  [[nodiscard]] auto checkFile(const std::filesystem::path& path) const
-      -> CheckResult;
+  // include_diff generates a patch for dirty files, labeled relative to cwd,
+  // with up to context_lines unchanged lines before and after each change.
+  [[nodiscard]] auto checkFile(const std::filesystem::path& path,
+                               bool include_diff = false,
+                               size_t context_lines = 3) const -> CheckResult;
 
  private:
   FormatStyle style_;

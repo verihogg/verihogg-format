@@ -9,12 +9,14 @@
 
 #include "data/lex_context.h"
 #include "formatter.h"
+#include "pipeline/unified_diff.h"
 
 namespace format {
 
 namespace fs = std::filesystem;
 
-auto FormatChecker::checkFile(const fs::path& path) const -> CheckResult {
+auto FormatChecker::checkFile(const fs::path& path, bool include_diff,
+                              size_t context_lines) const -> CheckResult {
   std::ifstream f{path, std::ios::binary};
   if (!f) {
     return {.status = CheckStatus::kUnreadable};
@@ -46,6 +48,12 @@ auto FormatChecker::checkFile(const fs::path& path) const -> CheckResult {
                                   ? CheckStatus::kClean
                                   : CheckStatus::kDirty,
                     .warnings = std::move(result.warnings)};
+  if (include_diff && check.status == CheckStatus::kDirty) {
+    const auto label =
+        path.is_absolute() ? path.lexically_relative(fs::current_path()) : path;
+    check.diff =
+        makeUnifiedDiff(original, result.formatted_text, label, context_lines);
+  }
   return check;
 }
 

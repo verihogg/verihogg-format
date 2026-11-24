@@ -51,10 +51,66 @@ check_cli(1 FALSE "${test_dir}/unmatched-*.sv")
 check_cli(0 FALSE "${clean}")
 check_cli(1 TRUE "${dirty}")
 check_cli(1 FALSE)
+
+# Diff must retain source-loader errors while still processing available files.
+function(diff_cli expected_status expected_patch)
+  execute_process(
+    COMMAND "${FORMATTER}" --diff --config "${test_dir}/config.yaml" ${ARGN}
+    WORKING_DIRECTORY "${test_dir}"
+    INPUT_FILE "${test_dir}/stdin.sv"
+    RESULT_VARIABLE status
+    OUTPUT_VARIABLE output
+    ERROR_VARIABLE errors
+    TIMEOUT 10)
+  if(NOT "${status}" STREQUAL "${expected_status}")
+    message(FATAL_ERROR "Expected diff exit ${expected_status}, got ${status}: ${errors}")
+  endif()
+  if(expected_patch)
+    if(NOT output MATCHES "^diff --git ")
+      message(FATAL_ERROR "Missing diff patch: ${output}")
+    endif()
+  elseif(NOT "${output}" STREQUAL "")
+    message(FATAL_ERROR "Unexpected diff output: ${output}")
+  endif()
+  if(errors MATCHES "verihogg-format:[^\n]* (processed|written)")
+    message(FATAL_ERROR "Diff printed file status: ${errors}")
+  endif()
+  set(last_errors "${errors}" PARENT_SCOPE)
+endfunction()
+
+foreach(check_flag IN ITEMS "" "--check")
+  diff_cli(1 TRUE ${check_flag} "${missing}" "${dirty}")
+  if(NOT last_errors MATCHES "Error:")
+    message(FATAL_ERROR "Diff lost source-loader error: ${last_errors}")
+  endif()
+  diff_cli(1 TRUE ${check_flag} "${dirty}" "${missing}")
+  diff_cli(1 FALSE ${check_flag} "${clean}" "${missing}")
+  diff_cli(1 FALSE ${check_flag} "${missing}")
+  diff_cli(1 FALSE ${check_flag} "${test_dir}/unmatched-*.sv")
+  diff_cli(0 FALSE ${check_flag} "${clean}")
+endforeach()
+diff_cli(0 TRUE "${dirty}")
+diff_cli(1 TRUE --check "${dirty}")
+diff_cli(0 TRUE)
+if(NOT "${last_errors}" STREQUAL "")
+  message(FATAL_ERROR "Warning-free stdin diff printed a summary: ${last_errors}")
+endif()
+diff_cli(1 FALSE --check)
+
+# Stdin warnings use the grouped summary and --no-links without status lines.
+file(WRITE "${test_dir}/stdin.sv"
+  "module m;\n  assign y  = foo]bar;   // bad\nendmodule\n")
+diff_cli(0 FALSE --no-links)
+if(NOT last_errors MATCHES "unmatched closing bracket" OR
+   NOT last_errors MATCHES "first at <stdin>:" OR
+   last_errors MATCHES "https://github.com/")
+  message(FATAL_ERROR "Incorrect stdin diff warning summary: ${last_errors}")
+endif()
+
 file(READ "${dirty}" dirty_content)
 file(READ "${clean}" clean_content)
 if(NOT "${dirty_content}" STREQUAL "module m;endmodule\n" OR
    NOT "${clean_content}" STREQUAL "module m;\nendmodule\n")
-  message(FATAL_ERROR "--check modified an input file")
+  message(FATAL_ERROR "--check or --diff modified an input file")
 endif()
 file(REMOVE_RECURSE "${test_dir}")

@@ -139,6 +139,121 @@ TEST_F(FormatArgsTest, CheckAndInplaceAreMutuallyExclusive) {
   EXPECT_FALSE(parse({"--inplace", "--check"}));
 }
 
+TEST_F(FormatArgsTest, DiffFlagSetsRunConfig) {
+  const auto [style, run] = buildStyle({"--diff"});
+  EXPECT_TRUE(run.diff);
+  EXPECT_FALSE(run.check);
+  EXPECT_FALSE(run.inplace);
+  EXPECT_EQ(run.color, format::ColorMode::kAuto);
+  EXPECT_EQ(run.diff_context, 3U);
+  EXPECT_EQ(run.hyperlinks, format::HyperlinkMode::kAuto);
+}
+
+TEST_F(FormatArgsTest, DiffHyperlinksCanBeForcedIndependentlyOfOtherOutput) {
+  const auto [style, run] = buildStyle(
+      {"--diff", "--hyperlinks=always", "--color=never", "--no-links"});
+  EXPECT_EQ(run.hyperlinks, format::HyperlinkMode::kAlways);
+  EXPECT_EQ(run.color, format::ColorMode::kNever);
+  EXPECT_TRUE(run.no_links);
+}
+
+TEST_F(FormatArgsTest, DiffHyperlinksCanBeDisabled) {
+  const auto [style, run] = buildStyle({"--diff", "--hyperlinks", "never"});
+  EXPECT_EQ(run.hyperlinks, format::HyperlinkMode::kNever);
+}
+
+TEST_F(FormatArgsTest, DiffHyperlinksCanBeAutomatic) {
+  const auto [style, run] = buildStyle({"--diff", "--hyperlinks=auto"});
+  EXPECT_EQ(run.hyperlinks, format::HyperlinkMode::kAuto);
+}
+
+TEST_F(FormatArgsTest, InvalidDiffHyperlinkModeIsRejected) {
+  EXPECT_FALSE(parse({"--diff", "--hyperlinks=invalid"}));
+}
+
+TEST_F(FormatArgsTest, DiffContextCanBeDisabled) {
+  const auto [style, run] = buildStyle({"--diff", "--diff-context=0"});
+  EXPECT_EQ(run.diff_context, 0U);
+}
+
+TEST_F(FormatArgsTest, DiffContextCanBeIncreased) {
+  const auto [style, run] = buildStyle({"--diff", "--diff-context", "5"});
+  EXPECT_EQ(run.diff_context, 5U);
+}
+
+TEST_F(FormatArgsTest, DiffContextShortOptionAcceptsSeparateValue) {
+  const auto [style, run] = buildStyle({"--diff", "-U", "1"});
+  EXPECT_EQ(run.diff_context, 1U);
+}
+
+TEST_F(FormatArgsTest, DiffContextShortOptionAcceptsAttachedValue) {
+  const auto [style, run] = buildStyle({"--diff", "--check", "-U5"});
+  EXPECT_EQ(run.diff_context, 5U);
+  EXPECT_TRUE(run.check);
+}
+
+TEST_F(FormatArgsTest, NegativeDiffContextIsRejected) {
+  EXPECT_FALSE(parse({"--diff", "--diff-context=-1"}));
+}
+
+TEST_F(FormatArgsTest, NonNumericDiffContextIsRejected) {
+  EXPECT_FALSE(parse({"--diff", "-U", "invalid"}));
+}
+
+TEST_F(FormatArgsTest, FractionalDiffContextIsRejected) {
+  EXPECT_FALSE(parse({"--diff", "--diff-context=1.5"}));
+}
+
+TEST_F(FormatArgsTest, OverflowingDiffContextIsRejected) {
+  EXPECT_FALSE(parse({"--diff", "--diff-context=18446744073709551616"}));
+}
+
+TEST_F(FormatArgsTest, MissingDiffContextIsRejected) {
+  EXPECT_FALSE(parse({"--diff", "-U"}));
+}
+
+TEST_F(FormatArgsTest, DiffColorCanBeForced) {
+  const auto [style, run] = buildStyle({"--diff", "--color=always"});
+  EXPECT_EQ(run.color, format::ColorMode::kAlways);
+}
+
+TEST_F(FormatArgsTest, DiffColorCanBeDisabled) {
+  const auto [style, run] = buildStyle({"--diff", "--color", "never"});
+  EXPECT_EQ(run.color, format::ColorMode::kNever);
+}
+
+TEST_F(FormatArgsTest, DiffColorCanBeAutomatic) {
+  const auto [style, run] = buildStyle({"--diff", "--color=auto"});
+  EXPECT_EQ(run.color, format::ColorMode::kAuto);
+}
+
+TEST_F(FormatArgsTest, InvalidDiffColorIsRejected) {
+  EXPECT_FALSE(parse({"--diff", "--color=invalid"}));
+}
+
+TEST_F(FormatArgsTest, DiffAndCheckCanBeCombined) {
+  const auto [style, run] = buildStyle({"--diff", "--check"});
+  EXPECT_TRUE(run.diff);
+  EXPECT_TRUE(run.check);
+}
+
+TEST_F(FormatArgsTest, DiffTreatsHelpAfterSeparatorAsFilename) {
+  const auto [style, run] = buildStyle({"--diff", "--", "--help"});
+  EXPECT_TRUE(run.diff);
+  ASSERT_EQ(getBinder().files().size(), 1U);
+  EXPECT_EQ(getBinder().files().front(), "--help");
+}
+
+TEST_F(FormatArgsTest, DiffIsDisabledByDefault) {
+  const auto [style, run] = buildStyle();
+  EXPECT_FALSE(run.diff);
+}
+
+TEST_F(FormatArgsTest, DiffAndInplaceAreMutuallyExclusive) {
+  EXPECT_FALSE(parse({"--diff", "--inplace"}));
+  EXPECT_FALSE(parse({"--inplace", "--diff"}));
+}
+
 TEST_F(FormatArgsTest, InplaceFlagSetsRunConfig) {
   auto [style, run] = buildStyle({"--inplace"});
 

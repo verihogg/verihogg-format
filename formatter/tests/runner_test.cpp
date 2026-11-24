@@ -5,14 +5,17 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <iterator>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "data/lex_context.h"
 #include "formatter.h"
+#include "pipeline/unified_diff.h"
 
 namespace {
 namespace fs = std::filesystem;
@@ -63,6 +66,19 @@ class RunnerCheckTest : public ::testing::Test {
     return format::runFormatter(files, styles, run,
                                 {.out = &out_, .err = &err_});
   }
+
+  auto diff(const std::vector<fs::path>& files,
+            const std::vector<format::FormatStyle>& styles,
+            bool check_mode = false, bool no_links = false) -> int {
+    format::RunConfig run;
+    run.diff = true;
+    run.check = check_mode;
+    run.no_links = no_links;
+    return format::runFormatter(files, styles, run,
+                                {.out = &out_, .err = &err_});
+  }
+
+  void failOutput() { out_.setstate(std::ios::badbit); }
 
   [[nodiscard]] auto dir() const -> const fs::path& { return dir_; }
   [[nodiscard]] auto out() const -> std::string { return out_.str(); }
@@ -160,6 +176,102 @@ TEST_F(RunnerCheckTest, EmptyInputHasNoDiagnostics) {
   EXPECT_EQ(check({}, {}), 0);
   EXPECT_TRUE(out().empty());
   EXPECT_TRUE(err().empty());
+}
+
+TEST_F(RunnerCheckTest,
+       DiffOnlyPrintsPatchWithoutWritingOrFailingOnDifferences) {
+  const std::string source = "module m; assign   a=b; endmodule";
+  const auto path = makeFile("dirty.sv", source);
+  const auto old_time = fs::last_write_time(path) - std::chrono::hours(1);
+  fs::last_write_time(path, old_time);
+  EXPECT_EQ(diff({path}, {{}}), 0);
+  EXPECT_TRUE(err().empty());
+  EXPECT_TRUE(out().starts_with("diff --git "));
+  EXPECT_NE(out().find("-" + source), std::string::npos);
+  std::ifstream in{path, std::ios::binary};
+  const std::string after{std::istreambuf_iterator<char>{in},
+                          std::istreambuf_iterator<char>{}};
+  EXPECT_EQ(after, source);
+  EXPECT_EQ(fs::last_write_time(path), old_time);
+}
+
+TEST_F(RunnerCheckTest, DiffWithCheckReportsDifferencesAsFailure) {
+  const auto path = makeFile("dirty.sv", "module m; assign   a=b; endmodule");
+  EXPECT_EQ(diff({path}, {{}}, true), 1);
+  EXPECT_NE(err().find("Needs formatting: " + path.string()),
+            std::string::npos);
+  EXPECT_TRUE(out().starts_with("diff --git "));
+}
+
+TEST_F(RunnerCheckTest, DiffOnlyStillFailsOnUnreadableFiles) {
+  const auto path = makeFile("dirty.sv", "module m; assign   a=b; endmodule");
+  const auto missing = dir() / "missing.sv";
+  EXPECT_EQ(diff({missing, path}, {{}, {}}), 1);
+  EXPECT_EQ(err(), "Error: cannot read " + missing.string() + "\n");
+  EXPECT_TRUE(out().starts_with("diff --git "));
+}
+
+TEST_F(RunnerCheckTest, CleanDiffHasNoOutput) {
+  const auto path = makeFile("clean.sv", formatted("module m; endmodule"));
+  EXPECT_EQ(diff({path}, {{}}), 0);
+  EXPECT_TRUE(out().empty());
+  EXPECT_TRUE(err().empty());
+}
+
+TEST_F(RunnerCheckTest, ParallelDiffsKeepStylesAndInputOrder) {
+  constexpr size_t kFiles = 8;
+  const std::string source = "module m; assign   a=b; endmodule";
+  std::vector<fs::path> files;
+  std::vector<format::FormatStyle> styles;
+  std::string expected;
+  for (size_t i = 0; i < kFiles; ++i) {
+    auto style = format::FormatStyle::defaults();
+    style.indentation_spaces = i % 2 == 0 ? 2 : 4;
+    styles.push_back(style);
+    files.push_back(
+        makeFile("file" + std::to_string(kFiles - i) + ".sv", source));
+    expected += format::makeUnifiedDiff(
+        source, formatted(source, style),
+        files.back().lexically_relative(fs::current_path()));
+  }
+  EXPECT_EQ(diff(files, styles), 0);
+  EXPECT_EQ(out(), expected);
+  EXPECT_TRUE(err().empty());
+}
+
+TEST_F(RunnerCheckTest, DiffOutputFailureIsReported) {
+  const auto path = makeFile("dirty.sv", "module m; endmodule");
+  failOutput();
+  EXPECT_THROW((void)diff({path}, {{}}), std::runtime_error);
+}
+
+TEST_F(RunnerCheckTest, DiffWarningsUseGroupedSummaryWithoutFileStatus) {
+  const auto path = makeFile(
+      "bad.sv", "module m;\n  assign y  = foo]bar;   // bad\nendmodule\n");
+  EXPECT_EQ(diff({path}, {{}}), 0);
+  EXPECT_TRUE(out().empty());
+  EXPECT_NE(err().find("unmatched closing bracket"), std::string::npos);
+  EXPECT_NE(err().find("first at bad.sv:"), std::string::npos);
+  EXPECT_NE(err().find("https://github.com/"), std::string::npos);
+  EXPECT_EQ(err().find("bad.sv processed"), std::string::npos);
+  EXPECT_EQ(err().find("bad.sv written"), std::string::npos);
+  EXPECT_EQ(err().find("Needs formatting:"), std::string::npos);
+}
+
+TEST_F(RunnerCheckTest, CheckDiffWarningsHonorNoLinks) {
+  const auto path =
+      makeFile("bad.sv",
+               "module m;\n  assign y  = foo]bar;   // bad\nendmodule\n"
+               "module n; assign   a=b; endmodule\n");
+  EXPECT_EQ(diff({path}, {{}}, true, true), 1);
+  EXPECT_TRUE(out().starts_with("diff --git "));
+  EXPECT_NE(err().find("Needs formatting: " + path.string()),
+            std::string::npos);
+  EXPECT_NE(err().find("unmatched closing bracket"), std::string::npos);
+  EXPECT_NE(err().find("first at bad.sv:"), std::string::npos);
+  EXPECT_EQ(err().find("https://github.com/"), std::string::npos);
+  EXPECT_EQ(err().find("bad.sv processed"), std::string::npos);
+  EXPECT_EQ(err().find("bad.sv written"), std::string::npos);
 }
 
 }  // namespace

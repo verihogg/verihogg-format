@@ -20,6 +20,7 @@ find_package(Microsoft.GSL CONFIG REQUIRED)
 
 find_package(CLI11 CONFIG REQUIRED)
 find_package(Threads REQUIRED)
+find_package(libgit2 1.9 CONFIG REQUIRED)
 
 find_package(yaml-cpp CONFIG REQUIRED)
 find_package(valijson CONFIG REQUIRED)
@@ -69,7 +70,7 @@ target_include_directories(${PROJECT_NAME}
 )
 target_compile_definitions(${PROJECT_NAME}
   PRIVATE VERIHOGG_VERSION="${PROJECT_VERSION}")
-target_link_libraries(${PROJECT_NAME} PRIVATE slang::slang Microsoft.GSL::GSL CLI11::CLI11 Threads::Threads yaml-cpp::yaml-cpp ${VHG_VALIJSON_TARGET})
+target_link_libraries(${PROJECT_NAME} PRIVATE slang::slang Microsoft.GSL::GSL CLI11::CLI11 Threads::Threads libgit2::libgit2package yaml-cpp::yaml-cpp ${VHG_VALIJSON_TARGET})
 
 if(MSVC)
   target_compile_options(${PROJECT_NAME} PRIVATE /W4 /bigobj)
@@ -109,7 +110,7 @@ if(GTest_FOUND)
   target_compile_definitions(verihogg-format-lib
     PUBLIC VERIHOGG_VERSION="${PROJECT_VERSION}")
   target_link_libraries(verihogg-format-lib PUBLIC slang::slang CLI11::CLI11 Threads::Threads)
-  target_link_libraries(verihogg-format-lib PRIVATE yaml-cpp::yaml-cpp ${VHG_VALIJSON_TARGET})
+  target_link_libraries(verihogg-format-lib PRIVATE Microsoft.GSL::GSL libgit2::libgit2package yaml-cpp::yaml-cpp ${VHG_VALIJSON_TARGET})
 
   file(GLOB_RECURSE TEST_SRC CONFIGURE_DEPENDS formatter/tests/*.cpp)
 
@@ -124,5 +125,20 @@ if(GTest_FOUND)
         -DFORMATTER=$<TARGET_FILE:verihogg-format>
         -DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/check-cli-tests
         -P ${CMAKE_CURRENT_SOURCE_DIR}/formatter/tests/check_cli_test.cmake)
+    add_test(NAME DiffColorCli
+      COMMAND ${CMAKE_COMMAND}
+        -DFORMATTER=$<TARGET_FILE:verihogg-format>
+        -DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/diff-color-cli-tests
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/formatter/tests/diff_color_cli_test.cmake)
+    add_test(NAME DiffContextCli
+      COMMAND ${CMAKE_COMMAND}
+        -DFORMATTER=$<TARGET_FILE:verihogg-format>
+        -DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/diff-context-cli-tests
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/formatter/tests/diff_context_cli_test.cmake)
+    add_test(NAME DiffHyperlinksCli
+      COMMAND ${CMAKE_COMMAND}
+        -DFORMATTER=$<TARGET_FILE:verihogg-format>
+        -DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/diff-hyperlinks-cli-tests
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/formatter/tests/diff_hyperlinks_cli_test.cmake)
   endif()
 endif()

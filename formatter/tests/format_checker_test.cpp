@@ -131,4 +131,18 @@ TEST_F(FormatCheckerTest, PreservesRecoveryWarnings) {
   EXPECT_EQ(read(), source);
 }
 
+TEST_F(FormatCheckerTest, PatchIsOnlyGeneratedWhenRequestedAndDirty) {
+  write("module m; assign   a=b; endmodule");
+  EXPECT_TRUE(check().diff.empty());
+  const auto dirty = format::FormatChecker({}).checkFile(path(), true);
+  EXPECT_EQ(dirty.status, format::CheckStatus::kDirty);
+  EXPECT_TRUE(dirty.diff.starts_with("diff --git "));
+  EXPECT_NE(dirty.diff.find("-module m; assign   a=b; endmodule"),
+            std::string::npos);
+  write(formatted("module m; assign a=b; endmodule").formatted_text);
+  const auto clean = format::FormatChecker({}).checkFile(path(), true);
+  EXPECT_EQ(clean.status, format::CheckStatus::kClean);
+  EXPECT_TRUE(clean.diff.empty());
+}
+
 }  // namespace

@@ -8,6 +8,7 @@
 #include <fstream>
 #include <gsl/span>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -18,6 +19,7 @@
 #include "data/format_warning.h"
 #include "data/lex_context.h"
 #include "formatter.h"
+#include "pipeline/diff_printer.h"
 #include "pipeline/format_checker.h"
 #include "pipeline/summary.h"
 
@@ -37,8 +39,8 @@ auto writeFile(const std::filesystem::path& path, std::string_view content)
 // Workers only write their own result slot; diagnostics are emitted after
 // joining so their order follows the input files rather than scheduling.
 auto checkInParallel(gsl::span<const std::filesystem::path> files,
-                     gsl::span<const FormatStyle> styles)
-    -> std::vector<CheckResult> {
+                     gsl::span<const FormatStyle> styles, bool include_diff,
+                     size_t context_lines) -> std::vector<CheckResult> {
   std::vector<CheckResult> results(files.size());
   std::atomic<size_t> next{0};
   std::atomic<bool> stop{false};
@@ -52,7 +54,8 @@ auto checkInParallel(gsl::span<const std::filesystem::path> files,
         if (i >= files.size()) {
           break;
         }
-        results.at(i) = FormatChecker(styles[i]).checkFile(files[i]);
+        results.at(i) = FormatChecker(styles[i]).checkFile(
+            files[i], include_diff, context_lines);
       }
     } catch (...) {
       const std::scoped_lock lock{error_mutex};
@@ -116,8 +119,9 @@ auto checkInParallel(gsl::span<const std::filesystem::path> files,
 auto runFormatter(gsl::span<const std::filesystem::path> files,
                   gsl::span<const FormatStyle> styles, const RunConfig& run,
                   Streams streams) -> int {
-  if (run.check) {
-    const auto results = checkInParallel(files, styles);
+  if (run.check || run.diff) {
+    const auto results =
+        checkInParallel(files, styles, run.diff, run.diff_context);
     int failed = 0;
     bool has_warnings = false;
     std::vector<summary::FileReport> reports;
@@ -131,8 +135,16 @@ auto runFormatter(gsl::span<const std::filesystem::path> files,
         case CheckStatus::kClean:
           break;
         case CheckStatus::kDirty:
-          *streams.err << "Needs formatting: " << files[i].string() << "\n";
-          ++failed;
+          if (run.check) {
+            *streams.err << "Needs formatting: " << files[i].string() << "\n";
+            ++failed;
+          }
+          if (run.diff) {
+            printDiff(*streams.out, result.diff,
+                      {.color = streams.diff_color,
+                       .hyperlinks = streams.diff_hyperlinks,
+                       .source_path = files[i]});
+          }
           break;
         case CheckStatus::kUnreadable:
           *streams.err << "Error: cannot read " << files[i].string() << "\n";
@@ -144,6 +156,12 @@ auto runFormatter(gsl::span<const std::filesystem::path> files,
       summary::printSummary(
           *streams.err, reports,
           {.inplace = false, .links = !run.no_links, .file_status = false});
+    }
+    if (run.diff) {
+      streams.out->flush();
+      if (!*streams.out) {
+        throw std::runtime_error("Cannot write diff output");
+      }
     }
     return failed;
   }

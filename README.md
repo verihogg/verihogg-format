@@ -85,15 +85,44 @@ The column limit is a layout target, not a guarantee: an unbreakable token or a 
 | --- | --- |
 | `verihogg-format rtl/alu.sv` | Print formatted source to stdout; leave the file untouched. |
 | `verihogg-format --inplace rtl/alu.sv` | Replace the file with formatted source. |
+| `verihogg-format --diff rtl/alu.sv` | Print a Git-style unified patch without changing the file. |
+| `verihogg-format --check --diff rtl/alu.sv` | Print a patch and return 1 when formatting is needed. |
 | `verihogg-format --check rtl/alu.sv` | Compare the file with formatted output without writing it; useful in CI. |
 | `verihogg-format < rtl/alu.sv` | Read from stdin and print to stdout. |
 | `verihogg-format --no-links rtl/alu.sv` | Omit GitHub issue links from the diagnostic summary. |
 
-Multiple file paths are accepted. In preview mode their formatted contents are written consecutively to stdout, without file separators; use `--inplace` or `--check` when processing many files independently. `--check` requires file paths and cannot be combined with `--inplace`.
+Multiple file paths are accepted. In preview mode their formatted contents are written consecutively to stdout, without file separators; use `--inplace` or `--check` when processing many files independently. `--check` requires file paths. Neither `--check` nor `--diff` can be combined with `--inplace`.
 
-`--check` writes nothing to stdout. It exits with **0** when all supplied files already match the formatter output, and **1** if a file needs formatting, cannot be read, or another error occurs. Normal preview and in-place runs return **0** even when they report unsupported constructs; an execution error returns **1**.
+`--check` writes nothing to stdout unless combined with `--diff`. It exits with **0** when all supplied files already match the formatter output, and **1** if a file needs formatting, cannot be read, or another error occurs. Normal preview and in-place runs return **0** even when they report unsupported constructs; an execution error returns **1**.
 
-If an input path cannot be found, `--check` reports the error and continues checking the other matched files; the final exit code is still **1**.
+If an input path cannot be found, `--check` and `--diff` report the error and continue checking the other matched files; the final exit code is still **1**.
+
+### Preview formatting changes
+
+```sh
+verihogg-format --diff rtl/alu.sv
+verihogg-format --check --diff rtl/alu.sv
+verihogg-format --diff rtl/alu.sv > changes.patch
+verihogg-format --diff < rtl/alu.sv
+```
+
+`--diff` prints only a Git-style unified patch to stdout and never writes source files. Differences alone return **0**; add `--check` to return **1** when files need formatting. Read, formatting, and output errors return **1**. A clean file produces no patch. Files are compared in parallel, with patches and diagnostics emitted in input order using each file's resolved configuration and CLI overrides.
+
+Patch paths are relative to the current directory; stdin uses `<stdin>`. Patches include up to three unchanged lines before and after each change by default, preserve line-ending bytes, and mark missing final newlines. Apply file patches from the same working directory, for example with `git apply changes.patch`. Paths outside that directory may require relocation before Git will apply them. Stdin works only with standalone `--diff`, since `--check` requires file paths.
+
+Use `--diff-context N` or `-U N` to choose a nonnegative number of context lines. For example, `--diff -U0` shows only changes, while `--diff -U5` shows up to five surrounding lines on each side. This option works with files, stdin, and `--check --diff`, and only affects diff output. When applying a patch generated with zero context, use `git apply --unidiff-zero changes.patch`.
+
+Lines beginning with `-` are original source; lines beginning with `+` are the formatted result. Lines beginning with a space are unchanged context. The `@@ -old,count +new,count @@` headers show line ranges before and after formatting.
+
+`--color=auto|always|never` controls diff highlighting. The default, `auto`, uses red for original lines, green for formatted lines, and cyan for hunk headers when stdout is a supported terminal. Output redirected to a file or pipe stays a plain patch. A nonempty `NO_COLOR` environment variable or `TERM=dumb` disables automatic color. `--color=always` forces ANSI colors even in pipes and overrides those environment settings; use `--color=never` to disable color explicitly. This option only affects diff output; diagnostics stay on stderr.
+
+In a one-line replacement, colored output additionally inverts the changed fragments so that added or removed spaces stand out. Spacing changes are highlighted separately around matching code, preserving tabs as written. For other text changes, the shared prefix and suffix stay unhighlighted. Changes involving multiple removed or added lines keep whole-line colors. These highlights only add terminal styles; plain patch output stays unchanged.
+
+`--hyperlinks=auto|always|never` makes each diff hunk header an OSC 8 hyperlink to the original source file and the first changed line, skipping unchanged context. Pure insertions link to the preceding original line, or line 1 at the beginning of a file. Paths are absolute and URI-encoded; the line number is included as a `#number` fragment. Following the link and honoring its line number depend on your terminal's file handler: see [iTerm2](https://iterm2.com/documentation-escape-codes.html#anchor-osc-8), [Kitty](https://sw.kovidgoyal.net/kitty/open_actions/), or the [WezTerm configuration recipe](https://wezterm.org/recipes/hyperlinks.html).
+
+The default, `auto`, enables hyperlinks when stdout is a terminal and `TERM` is not `dumb`. It does not depend on the terminal's name and also emits OSC 8 through SSH, tmux, and screen when those conditions hold. Your terminal and any multiplexer must support OSC 8 for the links to be clickable. Redirected output stays a plain patch. Use `always` to force OSC 8 even in redirected output, or `never` to disable it. Stdin has no file target and never gets hyperlinks. This setting is independent of `--color`, `NO_COLOR`, and `--no-links`; `--no-links` controls the GitHub issue links in the diagnostic summary.
+
+The link is attached to the `@@ ... @@` header itself, without a separate visible URL. In VS Code's integrated terminal, hover over that header and follow the link with Ctrl+click on Linux/Windows or Command+click on macOS; use Alt/Option+click instead if Ctrl/Command is configured as the editor's multi-cursor modifier. VS Code reads the `#number` suffix as the source line number; see its [file opener](https://github.com/microsoft/vscode/blob/main/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkOpeners.ts) and [link modifier handling](https://github.com/microsoft/vscode/blob/main/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkManager.ts).
 
 ### Diagnostics and issue links
 
@@ -108,9 +137,9 @@ verihogg-format: rtl/demo.sv processed (some regions left unchanged).
 
 If multiple reported files with warnings share a basename, the summary keeps their full paths in locations such as `first at /project/rtl/demo.sv:5` to distinguish them.
 
-The summary also offers pre-filled GitHub issue links for unsupported constructs and incorrect formatting. In normal preview and in-place runs, the incorrect-formatting link is shown even when there are no warnings, because a user may still notice a formatting mistake. `--no-links` removes the links and their explanatory text while retaining status and warning information. It works in `--check` mode too. Do not include private source code in an issue without reviewing it first.
+The summary also offers pre-filled GitHub issue links for unsupported constructs and incorrect formatting. In normal preview and in-place runs, the incorrect-formatting link is shown even when there are no warnings, because a user may still notice a formatting mistake. `--no-links` removes the links and their explanatory text while retaining status and warning information. It works in `--check` and `--diff` modes too. Do not include private source code in an issue without reviewing it first.
 
-`--check` prints `Needs formatting: <path>` for files that differ and errors for unreadable files. When there are formatter warnings, it also prints the grouped summary and issue links, without the per-file `processed` or `written` status lines. Without warnings, it omits the summary and links. Summary line numbers refer to the formatted output that would be produced, even though files are not rewritten. The return code depends on whether files match the formatter output and whether errors occurred, not on the number of warnings.
+`--check` prints `Needs formatting: <path>` for files that differ and errors for unreadable files. When there are formatter warnings, it also prints the grouped summary and issue links, without the per-file `processed` or `written` status lines. Without warnings, it omits the summary and links. Summary line numbers refer to the formatted output that would be produced, even though files are not rewritten. Standalone `--diff` uses the same warning-only summary and omits `Needs formatting` lines. The return code in check mode depends on whether files match the formatter output and whether errors occurred, not on the number of warnings.
 
 ## Formatting options
 
@@ -127,7 +156,11 @@ These options affect the current formatter:
 | `--config PATH` | automatic search | Load one specific YAML configuration file. |
 | `-n, --inplace` | off | Rewrite input files. |
 | `--check` | off | Check without rewriting input files. |
-| `--no-links` | off | Hide GitHub issue links in the diagnostic summary, including in `--check`. |
+| `--diff` | off | Print a unified patch without rewriting input files. |
+| `--color MODE` | `auto` | Highlight diff output: `auto`, `always`, or `never`. |
+| `--hyperlinks MODE` | `auto` | Link diff hunk headers to original source lines: `auto`, `always`, or `never`. |
+| `-U, --diff-context N` | `3` | Unchanged lines before and after each diff hunk; `0` omits context. |
+| `--no-links` | off | Hide GitHub issue links in the diagnostic summary, including in `--check` and `--diff`. |
 | `--wrap_end_else_clauses` | off | Put a block-closing `end` and the following `else` on separate lines. |
 
 The formatter currently runs its line-wrap search regardless of the reserved `try_wrap_long_lines` setting. Comments and unsupported regions are preserved rather than reflowed into a new comment style.
@@ -189,7 +222,7 @@ Use `nix develop` for a development shell with build tools and clang tools. The 
 
 ### CMake
 
-You need a C++20 compiler, CMake 3.20+, and the development packages for [slang](https://github.com/MikePopoloski/slang), [Microsoft GSL](https://github.com/microsoft/GSL), [CLI11](https://github.com/CLIUtils/CLI11), [yaml-cpp](https://github.com/jbeder/yaml-cpp), and [valijson](https://github.com/tristanpenman/valijson). CMake also finds the platform thread library. Depending on your package layout, set `CMAKE_PREFIX_PATH` or the corresponding `*_DIR` variables.
+You need a C++20 compiler, CMake 3.20+, and the development packages for [slang](https://github.com/MikePopoloski/slang), [Microsoft GSL](https://github.com/microsoft/GSL), [CLI11](https://github.com/CLIUtils/CLI11), [libgit2](https://libgit2.org/) 1.9+ with its CMake package, [yaml-cpp](https://github.com/jbeder/yaml-cpp), and [valijson](https://github.com/tristanpenman/valijson). CMake also finds the platform thread library. Depending on your package layout, set `CMAKE_PREFIX_PATH` or the corresponding `*_DIR` variables.
 
 To build only the formatter executable, without discovering Google Test:
 

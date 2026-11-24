@@ -68,6 +68,17 @@ Formatting options:
   -n, --inplace                        Overwrite source files instead of stdout
       --check                          Check formatting without rewriting files
       --no-links                       Omit GitHub issue links in the summary
+      --diff                           Print a unified patch without rewriting files
+      --color <mode>                   Color --diff output: auto | always | never (default: auto)
+      --hyperlinks <mode>              Link diff hunks to source: auto | always | never (default: auto)
+  -U, --diff-context <N>               Unchanged lines around each diff hunk (default: 3; 0 disables context)
+
+In --diff output, '-' marks original lines and '+' marks formatted lines.
+Auto color requires a supported terminal, TERM other than dumb, and no nonempty
+NO_COLOR environment variable. --color=always forces color, including in pipes.
+Hyperlinks are independent of color and --no-links. Auto hyperlinks require
+stdout to be a terminal and TERM other than dumb. Stdin has no source file to
+link. --hyperlinks=always emits links even in redirected output.
 
 The style options below are reserved and do not affect formatting yet.
 Line-wrap search currently always runs, regardless of --try_wrap_long_lines.
@@ -105,7 +116,7 @@ Boolean options (use --no_<name> to disable):
       --try_wrap_long_lines
       --wrap_end_else_clauses
 
-Every option above mirrors a key of the YAML configuration file.
+Style options mirror keys of the YAML configuration file.
 )");
 }
 
@@ -140,6 +151,19 @@ FormatArgsBinder::FormatArgsBinder() {
       "Overwrite the source files instead of outputting to stdout");
   app_.add_flag("--check", check_, "Check formatting without rewriting files")
       ->excludes(inplace);
+  app_.add_flag("--diff", diff_,
+                "Print a unified patch without rewriting files")
+      ->excludes(inplace);
+  app_.add_option("--color", color_,
+                  "Color --diff output: auto | always | never (default: auto)")
+      ->check(CLI::IsMember({"auto", "always", "never"}));
+  app_.add_option(
+          "--hyperlinks", hyperlinks_,
+          "Link diff hunks to source: auto | always | never (default: auto)")
+      ->check(CLI::IsMember({"auto", "always", "never"}));
+  app_.add_option("-U,--diff-context", diff_context_,
+                  "Unchanged lines around each diff hunk (default: 3)")
+      ->check(CLI::NonNegativeNumber);
 
   app_.add_option("--config", config_path_,
                   "Load configuration from a YAML file");
@@ -378,6 +402,18 @@ auto FormatArgsBinder::buildRunConfig() const -> RunConfig {
     run.check = *check_;
   }
   run.no_links = no_links_;
+  if (diff_.has_value()) {
+    run.diff = *diff_;
+  }
+  if (color_.has_value()) {
+    run.color = colorModeFromString(*color_);
+  }
+  if (hyperlinks_.has_value()) {
+    run.hyperlinks = hyperlinkModeFromString(*hyperlinks_);
+  }
+  if (diff_context_.has_value()) {
+    run.diff_context = *diff_context_;
+  }
   return run;
 }
 
