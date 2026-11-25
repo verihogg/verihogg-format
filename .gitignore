@@ -1,1 +1,7 @@
 /build/
+/build-*/
+/vcpkg/
+/.vscode/
+/.tmp/
+/.venv/
+/.local_development.db

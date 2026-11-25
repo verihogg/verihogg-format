@@ -1,5 +1,9 @@
 name: Clang Tidy
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
   pull_request:
@@ -11,6 +15,7 @@ permissions:
 jobs:
   clang-tidy:
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository

@@ -29,7 +29,7 @@ auto writeFile(const std::filesystem::path& path, std::string_view content)
     -> void {
   std::ofstream f{path, std::ios::binary | std::ios::trunc};
   if (!f) {
-    throw std::runtime_error("Cannot open: " + std::string{path});
+    throw std::runtime_error("Cannot open: " + path.string());
   }
   f << content;
 }

@@ -5,6 +5,7 @@
 #include <ios>
 #include <iterator>
 #include <string>
+#include <system_error>
 #include <utility>
 
 #include "data/lex_context.h"
@@ -15,6 +16,10 @@ namespace format {
 namespace fs = std::filesystem;
 
 auto FormatChecker::checkFile(const fs::path& path) const -> CheckResult {
+  std::error_code ec;
+  if (fs::is_directory(path, ec)) {
+    return {.status = CheckStatus::kUnreadable};
+  }
   std::ifstream f{path, std::ios::binary};
   if (!f) {
     return {.status = CheckStatus::kUnreadable};
