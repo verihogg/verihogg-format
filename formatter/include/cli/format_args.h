@@ -61,6 +61,8 @@ class FormatArgsBinder {
   std::optional<std::string> formal_parameters_alignment_;
   std::optional<std::string> named_parameter_alignment_;
   std::optional<std::string> named_port_alignment_;
+  std::optional<std::string> named_port_paren_alignment_;
+  std::optional<std::string> named_parameter_paren_alignment_;
   std::optional<std::string> parameter_declaration_alignment_;
   std::optional<std::string> case_items_alignment_;
   std::optional<std::string> enum_assignment_statement_alignment_;
@@ -68,15 +70,25 @@ class FormatArgsBinder {
   std::optional<std::string> class_member_variable_alignment_;
   std::optional<std::string> distribution_items_alignment_;
 
+  std::optional<std::string> module_body_indentation_;
   std::optional<std::string> port_declarations_indentation_;
   std::optional<std::string> formal_parameters_indentation_;
   std::optional<std::string> named_parameter_indentation_;
   std::optional<std::string> named_port_indentation_;
 
+  std::optional<std::string> module_parameter_list_opening_;
+  std::optional<std::string> module_port_list_opening_;
+  std::optional<std::string> port_list_comma_placement_;
+  std::optional<std::string> parameter_list_comma_placement_;
+  std::optional<bool> break_after_parameter_override_;
   std::optional<std::string> alignment_group_boundary_;
 
   std::optional<bool> port_declarations_right_align_packed_dimensions_;
   std::optional<bool> port_declarations_right_align_unpacked_dimensions_;
+  std::optional<std::string> packed_dimension_separator_;
+  std::optional<std::string> spacing_before_unpacked_dimensions_;
+  std::optional<std::string> named_port_paren_padding_;
+  std::optional<std::string> named_parameter_paren_padding_;
   std::optional<bool> compact_indexing_and_selections_;
   std::optional<bool> class_parameter_space_;
   std::optional<bool> expand_coverpoints_;

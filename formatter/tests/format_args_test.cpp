@@ -253,13 +253,20 @@ TEST_F(FormatArgsTest, CliOverridesBaseStyle) {
   base.column_limit = kBaseColumnLimit;
   base.wrap_spaces = kBaseWrapSpaces;
   base.port_declarations_alignment = format::AlignmentPolicy::kFlushLeft;
+  base.port_list_comma_placement = format::ListCommaPlacement::kLeading;
+  base.parameter_list_comma_placement = format::ListCommaPlacement::kPreserve;
 
-  auto [style, run] = buildStyle({"--column_limit", "140"}, base);
+  auto [style, run] = buildStyle(
+      {"--column_limit", "140", "--port_list_comma_placement=trailing"}, base);
 
   EXPECT_EQ(style.column_limit, 140U);
   EXPECT_EQ(style.wrap_spaces, kBaseWrapSpaces);
   EXPECT_EQ(style.port_declarations_alignment,
             format::AlignmentPolicy::kFlushLeft);
+  EXPECT_EQ(style.port_list_comma_placement,
+            format::ListCommaPlacement::kTrailing);
+  EXPECT_EQ(style.parameter_list_comma_placement,
+            format::ListCommaPlacement::kPreserve);
   EXPECT_EQ(style.indentation_spaces, format::defaults::kIndentationSpaces);
   EXPECT_FALSE(run.inplace);
 }
@@ -291,6 +298,8 @@ TEST_F(FormatArgsTest, AlignmentPolicyOptionsAreApplied) {
       "flush-left",
       "--named_port_alignment",
       "preserve",
+      "--named_port_paren_alignment=both",
+      "--named_parameter_paren_alignment=both",
       "--parameter_declaration_alignment",
       "align",
       "--case_items_alignment",
@@ -315,6 +324,9 @@ TEST_F(FormatArgsTest, AlignmentPolicyOptionsAreApplied) {
   EXPECT_EQ(style.named_parameter_alignment,
             format::AlignmentPolicy::kFlushLeft);
   EXPECT_EQ(style.named_port_alignment, format::AlignmentPolicy::kPreserve);
+  EXPECT_EQ(style.named_port_paren_alignment, format::ParenAlignment::kBoth);
+  EXPECT_EQ(style.named_parameter_paren_alignment,
+            format::ParenAlignment::kBoth);
   EXPECT_EQ(style.parameter_declaration_alignment,
             format::AlignmentPolicy::kAlign);
   EXPECT_EQ(style.case_items_alignment, format::AlignmentPolicy::kFlushLeft);
@@ -343,6 +355,7 @@ TEST_F(FormatArgsTest, InvalidAlignmentPolicyRejectedByParser) {
 
 TEST_F(FormatArgsTest, IndentationPolicyOptionsAreApplied) {
   auto [style, run] = buildStyle({
+      "--module_body_indentation=none",
       "--port_declarations_indentation",
       "indent",
       "--formal_parameters_indentation",
@@ -353,6 +366,8 @@ TEST_F(FormatArgsTest, IndentationPolicyOptionsAreApplied) {
       "indent",
   });
 
+  EXPECT_EQ(style.module_body_indentation,
+            format::ModuleBodyIndentation::kNone);
   EXPECT_EQ(style.port_declarations_indentation,
             format::IndentationPolicy::kIndent);
   EXPECT_EQ(style.formal_parameters_indentation,
@@ -392,6 +407,7 @@ TEST_F(FormatArgsTest, InvalidAlignmentGroupBoundaryRejectedByParser) {
 
 TEST_F(FormatArgsTest, BooleanOptionsEnable) {
   auto [style, run] = buildStyle({
+      "--break_after_parameter_override",
       "--port_declarations_right_align_packed_dimensions",
       "--port_declarations_right_align_unpacked_dimensions",
       "--compact_indexing_and_selections",
@@ -401,6 +417,7 @@ TEST_F(FormatArgsTest, BooleanOptionsEnable) {
       "--wrap_end_else_clauses",
   });
 
+  EXPECT_TRUE(style.break_after_parameter_override);
   EXPECT_TRUE(style.port_declarations_right_align_packed_dimensions);
   EXPECT_TRUE(style.port_declarations_right_align_unpacked_dimensions);
   EXPECT_TRUE(style.compact_indexing_and_selections);
@@ -412,11 +429,13 @@ TEST_F(FormatArgsTest, BooleanOptionsEnable) {
 
 TEST_F(FormatArgsTest, BooleanOptionsNegated) {
   format::FormatStyle base = format::FormatStyle::defaults();
+  base.break_after_parameter_override = true;
   base.compact_indexing_and_selections = true;
   base.expand_coverpoints = true;
 
   auto [style, run] = buildStyle(
       {
+          "--no_break_after_parameter_override",
           "--no_port_declarations_right_align_packed_dimensions",
           "--no_port_declarations_right_align_unpacked_dimensions",
           "--no_compact_indexing_and_selections",
@@ -427,6 +446,7 @@ TEST_F(FormatArgsTest, BooleanOptionsNegated) {
       },
       base);
 
+  EXPECT_FALSE(style.break_after_parameter_override);
   EXPECT_FALSE(style.port_declarations_right_align_packed_dimensions);
   EXPECT_FALSE(style.port_declarations_right_align_unpacked_dimensions);
   EXPECT_FALSE(style.compact_indexing_and_selections);
@@ -444,12 +464,20 @@ TEST_F(FormatArgsTest, UnspecifiedOptionsKeepBaseStyle) {
   format::FormatStyle base = format::FormatStyle::defaults();
   base.named_port_alignment = format::AlignmentPolicy::kPreserve;
   base.named_port_indentation = format::IndentationPolicy::kIndent;
+  base.module_port_list_opening = format::ListOpening::kPreserve;
+  base.named_parameter_paren_padding = format::ParenPadding::kSpaced;
   base.expand_coverpoints = true;
 
-  auto [style, run] = buildStyle({"--column_limit", "80"}, base);
+  auto [style, run] = buildStyle(
+      {"--column_limit", "80", "--module_parameter_list_opening=next-line"},
+      base);
 
   EXPECT_EQ(style.named_port_alignment, format::AlignmentPolicy::kPreserve);
   EXPECT_EQ(style.named_port_indentation, format::IndentationPolicy::kIndent);
+  EXPECT_EQ(style.module_parameter_list_opening,
+            format::ListOpening::kNextLine);
+  EXPECT_EQ(style.module_port_list_opening, format::ListOpening::kPreserve);
+  EXPECT_EQ(style.named_parameter_paren_padding, format::ParenPadding::kSpaced);
   EXPECT_TRUE(style.expand_coverpoints);
 }
 

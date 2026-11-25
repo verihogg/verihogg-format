@@ -141,6 +141,26 @@
       "default": "infer"
     },
 
+    "named_port_paren_alignment": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/parenAlignment"
+        }
+      ],
+      "description": "Align only opening parentheses or both parentheses when named port alignment is enabled. Not implemented yet: accepted and stored, but has no effect on formatting.",
+      "default": "opening"
+    },
+
+    "named_parameter_paren_alignment": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/parenAlignment"
+        }
+      ],
+      "description": "Align only opening parentheses or both parentheses when named parameter alignment is enabled. Not implemented yet: accepted and stored, but has no effect on formatting.",
+      "default": "opening"
+    },
+
     "parameter_declaration_alignment": {
       "allOf": [
         {
@@ -201,6 +221,16 @@
       "default": "infer"
     },
 
+    "module_body_indentation": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/moduleBodyIndentation"
+        }
+      ],
+      "description": "Additional indentation level for the body of a module. Not implemented yet: accepted and stored, but has no effect on formatting.",
+      "default": "indent"
+    },
+
     "port_declarations_indentation": {
       "allOf": [
         {
@@ -241,6 +271,52 @@
       "default": "wrap"
     },
 
+    "module_parameter_list_opening": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/listOpening"
+        }
+      ],
+      "description": "Placement of the opening #( of a module parameter list relative to the module name. Not implemented yet: accepted and stored, but has no effect on formatting.",
+      "default": "same-line"
+    },
+
+    "module_port_list_opening": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/listOpening"
+        }
+      ],
+      "description": "Placement of the opening ( of a module port list relative to the preceding part of the module header. Not implemented yet: accepted and stored, but has no effect on formatting.",
+      "default": "same-line"
+    },
+
+    "port_list_comma_placement": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/listCommaPlacement"
+        }
+      ],
+      "description": "Placement of an existing comma relative to a line break in a port list. Not implemented yet: accepted and stored, but has no effect on formatting.",
+      "default": "trailing"
+    },
+
+    "parameter_list_comma_placement": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/listCommaPlacement"
+        }
+      ],
+      "description": "Placement of an existing comma relative to a line break in a parameter list. Not implemented yet: accepted and stored, but has no effect on formatting.",
+      "default": "trailing"
+    },
+
+    "break_after_parameter_override": {
+      "type": "boolean",
+      "description": "Start the instance name on a new line after the closing parenthesis of the parameter override list. Not implemented yet: accepted and stored, but has no effect on formatting.",
+      "default": false
+    },
+
     "alignment_group_boundary": {
       "allOf": [
         {
@@ -261,6 +337,46 @@
       "type": "boolean",
       "description": "Right-align unpacked dimensions in port declarations. Not implemented yet: accepted and stored, but has no effect on formatting.",
       "default": false
+    },
+
+    "packed_dimension_separator": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/dimensionSpacing"
+        }
+      ],
+      "description": "Whitespace between adjacent packed dimensions in a declaration. Not implemented yet: accepted and stored, but has no effect on formatting.",
+      "default": "compact"
+    },
+
+    "spacing_before_unpacked_dimensions": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/dimensionSpacing"
+        }
+      ],
+      "description": "Whitespace between a declared name and its first unpacked dimension. Not implemented yet: accepted and stored, but has no effect on formatting.",
+      "default": "compact"
+    },
+
+    "named_port_paren_padding": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/parenPadding"
+        }
+      ],
+      "description": "Spacing at the edges of an expression inside a named port connection. Not implemented yet: accepted and stored, but has no effect on formatting.",
+      "default": "compact"
+    },
+
+    "named_parameter_paren_padding": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/parenPadding"
+        }
+      ],
+      "description": "Spacing at the edges of an expression inside a named parameter override. Not implemented yet: accepted and stored, but has no effect on formatting.",
+      "default": "compact"
     },
 
     "compact_indexing_and_selections": {
@@ -320,6 +436,57 @@
         "blank-lines",
         "separator-comments",
         "blank-lines-and-separator-comments"
+      ]
+    },
+
+    "moduleBodyIndentation": {
+      "type": "string",
+      "enum": [
+        "indent",
+        "none"
+      ]
+    },
+
+    "listOpening": {
+      "type": "string",
+      "enum": [
+        "same-line",
+        "next-line",
+        "preserve"
+      ]
+    },
+
+    "dimensionSpacing": {
+      "type": "string",
+      "enum": [
+        "compact",
+        "space",
+        "preserve"
+      ]
+    },
+
+    "parenAlignment": {
+      "type": "string",
+      "enum": [
+        "opening",
+        "both"
+      ]
+    },
+
+    "parenPadding": {
+      "type": "string",
+      "enum": [
+        "compact",
+        "spaced"
+      ]
+    },
+
+    "listCommaPlacement": {
+      "type": "string",
+      "enum": [
+        "leading",
+        "trailing",
+        "preserve"
       ]
     }
   }

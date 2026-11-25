@@ -28,6 +28,18 @@ constexpr std::array<std::string_view, 2> kIndentationPolicyValues = {"indent",
 constexpr std::array<std::string_view, 4> kAlignmentGroupBoundaryValues = {
     "none", "blank-lines", "separator-comments",
     "blank-lines-and-separator-comments"};
+constexpr std::array<std::string_view, 2> kModuleBodyIndentationValues = {
+    "indent", "none"};
+constexpr std::array<std::string_view, 3> kListOpeningValues = {
+    "same-line", "next-line", "preserve"};
+constexpr std::array<std::string_view, 3> kDimensionSpacingValues = {
+    "compact", "space", "preserve"};
+constexpr std::array<std::string_view, 2> kParenAlignmentValues = {"opening",
+                                                                   "both"};
+constexpr std::array<std::string_view, 2> kParenPaddingValues = {"compact",
+                                                                 "spaced"};
+constexpr std::array<std::string_view, 3> kListCommaPlacementValues = {
+    "leading", "trailing", "preserve"};
 
 // Describes a long-only option constrained to a fixed set of values.
 struct ChoiceOption {
@@ -72,7 +84,8 @@ Formatting options:
 The style options below are reserved and do not affect formatting yet.
 Line-wrap search currently always runs, regardless of --try_wrap_long_lines.
 
-Alignment options (align | flush-left | preserve | infer, default: infer):
+Alignment options:
+  Policies (align | flush-left | preserve | infer, default: infer):
       --port_declarations_alignment
       --module_net_variable_alignment
       --assignment_statement_alignment
@@ -86,21 +99,51 @@ Alignment options (align | flush-left | preserve | infer, default: infer):
       --class_member_variable_alignment
       --distribution_items_alignment
 
-Indentation options (indent | wrap, default: wrap):
+  Named connection parentheses (opening | both, default: opening):
+      --named_port_paren_alignment
+      --named_parameter_paren_alignment
+
+      --alignment_group_boundary <rule>  none | blank-lines | separator-comments |
+                                         blank-lines-and-separator-comments (default: none)
+
+Indentation options:
+      --module_body_indentation <mode>  indent | none (default: indent)
+
+  List indentation (indent | wrap, default: wrap):
       --port_declarations_indentation
       --formal_parameters_indentation
       --named_parameter_indentation
       --named_port_indentation
 
-Alignment grouping:
-      --alignment_group_boundary <rule>  none | blank-lines | separator-comments |
-                                         blank-lines-and-separator-comments (default: none)
+List layout options:
+  Opening placement (same-line | next-line | preserve, default: same-line):
+      --module_parameter_list_opening
+      --module_port_list_opening
+
+  Comma placement (leading | trailing | preserve, default: trailing):
+      --port_list_comma_placement
+      --parameter_list_comma_placement
+
+  Break after the closing ) of an instance parameter override list (default: off):
+      --break_after_parameter_override
+      --no_break_after_parameter_override
+
+Spacing options:
+  Dimension spacing (compact | space | preserve, default: compact):
+      --packed_dimension_separator
+      --spacing_before_unpacked_dimensions
+
+  Named connection parentheses (compact | spaced, default: compact):
+      --named_port_paren_padding
+      --named_parameter_paren_padding
+
+  Boolean spacing options (use --no_<name> to disable):
+      --compact_indexing_and_selections   (default: true)
+      --class_parameter_space
 
 Boolean options (use --no_<name> to disable):
       --port_declarations_right_align_packed_dimensions
       --port_declarations_right_align_unpacked_dimensions
-      --compact_indexing_and_selections   (default: true)
-      --class_parameter_space
       --expand_coverpoints
       --try_wrap_long_lines
       --wrap_end_else_clauses
@@ -178,6 +221,17 @@ FormatArgsBinder::FormatArgsBinder() {
              {.name = "--named_port_alignment",
               .description = "Alignment of named port connections",
               .values = kAlignmentPolicyValues});
+  add_choice(app_, named_port_paren_alignment_,
+             {.name = "--named_port_paren_alignment",
+              .description = "Align only opening parentheses or both "
+                             "parentheses when named port alignment is enabled",
+              .values = kParenAlignmentValues});
+  add_choice(
+      app_, named_parameter_paren_alignment_,
+      {.name = "--named_parameter_paren_alignment",
+       .description = "Align only opening parentheses or both parentheses when "
+                      "named parameter alignment is enabled",
+       .values = kParenAlignmentValues});
   add_choice(
       app_, parameter_declaration_alignment_,
       {.name = "--parameter_declaration_alignment",
@@ -206,6 +260,11 @@ FormatArgsBinder::FormatArgsBinder() {
               .values = kAlignmentPolicyValues});
 
   add_choice(
+      app_, module_body_indentation_,
+      {.name = "--module_body_indentation",
+       .description = "Additional indentation level for the body of a module",
+       .values = kModuleBodyIndentationValues});
+  add_choice(
       app_, port_declarations_indentation_,
       {.name = "--port_declarations_indentation",
        .description = "Indentation of ports in a module or interface header",
@@ -224,6 +283,31 @@ FormatArgsBinder::FormatArgsBinder() {
               .description = "Indentation of named ports in an instantiation",
               .values = kIndentationPolicyValues});
 
+  add_choice(app_, module_parameter_list_opening_,
+             {.name = "--module_parameter_list_opening",
+              .description = "Placement of the opening #( of a module "
+                             "parameter list relative to the module name",
+              .values = kListOpeningValues});
+  add_choice(
+      app_, module_port_list_opening_,
+      {.name = "--module_port_list_opening",
+       .description = "Placement of the opening ( of a module port list "
+                      "relative to the preceding part of the module header",
+       .values = kListOpeningValues});
+  add_choice(app_, port_list_comma_placement_,
+             {.name = "--port_list_comma_placement",
+              .description = "Placement of an existing comma relative to a "
+                             "line break in a port list",
+              .values = kListCommaPlacementValues});
+  add_choice(app_, parameter_list_comma_placement_,
+             {.name = "--parameter_list_comma_placement",
+              .description = "Placement of an existing comma relative to a "
+                             "line break in a parameter list",
+              .values = kListCommaPlacementValues});
+  add_negatable_flag(app_, "--break_after_parameter_override",
+                     break_after_parameter_override_,
+                     "Break after the closing ) of an instance parameter "
+                     "override list");
   add_choice(app_, alignment_group_boundary_,
              {.name = "--alignment_group_boundary",
               .description = "Rule determining where an alignment group ends",
@@ -236,6 +320,27 @@ FormatArgsBinder::FormatArgsBinder() {
                      "--port_declarations_right_align_unpacked_dimensions",
                      port_declarations_right_align_unpacked_dimensions_,
                      "Right-align unpacked dimensions in port declarations");
+  add_choice(
+      app_, packed_dimension_separator_,
+      {.name = "--packed_dimension_separator",
+       .description =
+           "Whitespace between adjacent packed dimensions in a declaration",
+       .values = kDimensionSpacingValues});
+  add_choice(app_, spacing_before_unpacked_dimensions_,
+             {.name = "--spacing_before_unpacked_dimensions",
+              .description = "Whitespace between a declared name and its first "
+                             "unpacked dimension",
+              .values = kDimensionSpacingValues});
+  add_choice(app_, named_port_paren_padding_,
+             {.name = "--named_port_paren_padding",
+              .description = "Spacing at the edges of an expression inside a "
+                             "named port connection",
+              .values = kParenPaddingValues});
+  add_choice(app_, named_parameter_paren_padding_,
+             {.name = "--named_parameter_paren_padding",
+              .description = "Spacing at the edges of an expression inside a "
+                             "named parameter override",
+              .values = kParenPaddingValues});
   add_negatable_flag(app_, "--compact_indexing_and_selections",
                      compact_indexing_and_selections_,
                      "Use compact expressions inside indexes and selections");
@@ -297,6 +402,14 @@ void FormatArgsBinder::applyStyleOverrides(FormatStyle& style) const {
     style.named_port_alignment =
         alignmentPolicyFromString(*named_port_alignment_);
   }
+  if (named_port_paren_alignment_.has_value()) {
+    style.named_port_paren_alignment =
+        parenAlignmentFromString(*named_port_paren_alignment_);
+  }
+  if (named_parameter_paren_alignment_.has_value()) {
+    style.named_parameter_paren_alignment =
+        parenAlignmentFromString(*named_parameter_paren_alignment_);
+  }
   if (parameter_declaration_alignment_.has_value()) {
     style.parameter_declaration_alignment =
         alignmentPolicyFromString(*parameter_declaration_alignment_);
@@ -322,6 +435,10 @@ void FormatArgsBinder::applyStyleOverrides(FormatStyle& style) const {
         alignmentPolicyFromString(*distribution_items_alignment_);
   }
 
+  if (module_body_indentation_.has_value()) {
+    style.module_body_indentation =
+        moduleBodyIndentationFromString(*module_body_indentation_);
+  }
   if (port_declarations_indentation_.has_value()) {
     style.port_declarations_indentation =
         indentationPolicyFromString(*port_declarations_indentation_);
@@ -339,6 +456,25 @@ void FormatArgsBinder::applyStyleOverrides(FormatStyle& style) const {
         indentationPolicyFromString(*named_port_indentation_);
   }
 
+  if (module_parameter_list_opening_.has_value()) {
+    style.module_parameter_list_opening =
+        listOpeningFromString(*module_parameter_list_opening_);
+  }
+  if (module_port_list_opening_.has_value()) {
+    style.module_port_list_opening =
+        listOpeningFromString(*module_port_list_opening_);
+  }
+  if (port_list_comma_placement_.has_value()) {
+    style.port_list_comma_placement =
+        listCommaPlacementFromString(*port_list_comma_placement_);
+  }
+  if (parameter_list_comma_placement_.has_value()) {
+    style.parameter_list_comma_placement =
+        listCommaPlacementFromString(*parameter_list_comma_placement_);
+  }
+  if (break_after_parameter_override_.has_value()) {
+    style.break_after_parameter_override = *break_after_parameter_override_;
+  }
   if (alignment_group_boundary_.has_value()) {
     style.alignment_group_boundary =
         alignmentGroupBoundaryFromString(*alignment_group_boundary_);
@@ -351,6 +487,22 @@ void FormatArgsBinder::applyStyleOverrides(FormatStyle& style) const {
   if (port_declarations_right_align_unpacked_dimensions_.has_value()) {
     style.port_declarations_right_align_unpacked_dimensions =
         *port_declarations_right_align_unpacked_dimensions_;
+  }
+  if (packed_dimension_separator_.has_value()) {
+    style.packed_dimension_separator =
+        dimensionSpacingFromString(*packed_dimension_separator_);
+  }
+  if (spacing_before_unpacked_dimensions_.has_value()) {
+    style.spacing_before_unpacked_dimensions =
+        dimensionSpacingFromString(*spacing_before_unpacked_dimensions_);
+  }
+  if (named_port_paren_padding_.has_value()) {
+    style.named_port_paren_padding =
+        parenPaddingFromString(*named_port_paren_padding_);
+  }
+  if (named_parameter_paren_padding_.has_value()) {
+    style.named_parameter_paren_padding =
+        parenPaddingFromString(*named_parameter_paren_padding_);
   }
   if (compact_indexing_and_selections_.has_value()) {
     style.compact_indexing_and_selections = *compact_indexing_and_selections_;

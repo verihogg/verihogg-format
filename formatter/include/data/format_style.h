@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -99,6 +100,119 @@ enum class AlignmentGroupBoundary : uint8_t {
       std::string("Unknown alignment group boundary: ").append(s));
 }
 
+enum class ModuleBodyIndentation : uint8_t {
+  kIndent,
+  kNone,
+};
+
+[[nodiscard]] inline auto moduleBodyIndentationFromString(
+    std::string_view value) -> ModuleBodyIndentation {
+  if (value == "indent") {
+    return ModuleBodyIndentation::kIndent;
+  }
+  if (value == "none") {
+    return ModuleBodyIndentation::kNone;
+  }
+  throw std::invalid_argument("Unknown module body indentation: " +
+                              std::string(value));
+}
+
+enum class ListOpening : uint8_t {
+  kSameLine,
+  kNextLine,
+  kPreserve,
+};
+
+[[nodiscard]] inline auto listOpeningFromString(std::string_view value)
+    -> ListOpening {
+  if (value == "same-line") {
+    return ListOpening::kSameLine;
+  }
+  if (value == "next-line") {
+    return ListOpening::kNextLine;
+  }
+  if (value == "preserve") {
+    return ListOpening::kPreserve;
+  }
+  throw std::invalid_argument("Unknown list opening: " + std::string(value));
+}
+
+enum class DimensionSpacing : uint8_t {
+  kCompact,
+  kSpace,
+  kPreserve,
+};
+
+[[nodiscard]] inline auto dimensionSpacingFromString(std::string_view value)
+    -> DimensionSpacing {
+  if (value == "compact") {
+    return DimensionSpacing::kCompact;
+  }
+  if (value == "space") {
+    return DimensionSpacing::kSpace;
+  }
+  if (value == "preserve") {
+    return DimensionSpacing::kPreserve;
+  }
+  throw std::invalid_argument("Unknown dimension spacing: " +
+                              std::string(value));
+}
+
+enum class ParenAlignment : uint8_t {
+  kOpening,
+  kBoth,
+};
+
+[[nodiscard]] inline auto parenAlignmentFromString(std::string_view value)
+    -> ParenAlignment {
+  if (value == "opening") {
+    return ParenAlignment::kOpening;
+  }
+  if (value == "both") {
+    return ParenAlignment::kBoth;
+  }
+  throw std::invalid_argument("Unknown parenthesis alignment: " +
+                              std::string(value));
+}
+
+enum class ParenPadding : uint8_t {
+  kCompact,
+  kSpaced,
+};
+
+[[nodiscard]] inline auto parenPaddingFromString(std::string_view value)
+    -> ParenPadding {
+  if (value == "compact") {
+    return ParenPadding::kCompact;
+  }
+  if (value == "spaced") {
+    return ParenPadding::kSpaced;
+  }
+  throw std::invalid_argument("Unknown parenthesis padding: " +
+                              std::string(value));
+}
+
+enum class ListCommaPlacement : uint8_t {
+  kLeading,
+  kTrailing,
+  kPreserve,
+};
+
+[[nodiscard]] inline auto listCommaPlacementFromString(std::string_view value)
+    -> ListCommaPlacement {
+  if (value == "leading") {
+    return ListCommaPlacement::kLeading;
+  }
+  if (value == "trailing") {
+    return ListCommaPlacement::kTrailing;
+  }
+  if (value == "preserve") {
+    return ListCommaPlacement::kPreserve;
+  }
+  throw std::invalid_argument("Unknown list comma placement: " +
+                              std::string(value));
+}
+
 struct RunConfig {
   bool inplace = false;
   bool check = false;
@@ -125,6 +239,7 @@ inline constexpr bool kClassParameterSpace = false;
 inline constexpr bool kExpandCoverpoints = false;
 inline constexpr bool kTryWrapLongLines = false;
 inline constexpr bool kWrapEndElseClauses = false;
+inline constexpr bool kBreakAfterParameterOverride = false;
 }  // namespace defaults
 
 struct FormatStyle {
@@ -141,6 +256,8 @@ struct FormatStyle {
   AlignmentPolicy formal_parameters_alignment = defaults::kAlignmentPolicy;
   AlignmentPolicy named_parameter_alignment = defaults::kAlignmentPolicy;
   AlignmentPolicy named_port_alignment = defaults::kAlignmentPolicy;
+  ParenAlignment named_port_paren_alignment = ParenAlignment::kOpening;
+  ParenAlignment named_parameter_paren_alignment = ParenAlignment::kOpening;
   AlignmentPolicy parameter_declaration_alignment = defaults::kAlignmentPolicy;
   AlignmentPolicy case_items_alignment = defaults::kAlignmentPolicy;
   AlignmentPolicy enum_assignment_statement_alignment =
@@ -149,6 +266,8 @@ struct FormatStyle {
   AlignmentPolicy class_member_variable_alignment = defaults::kAlignmentPolicy;
   AlignmentPolicy distribution_items_alignment = defaults::kAlignmentPolicy;
 
+  ModuleBodyIndentation module_body_indentation =
+      ModuleBodyIndentation::kIndent;
   IndentationPolicy port_declarations_indentation =
       defaults::kIndentationPolicy;
   IndentationPolicy formal_parameters_indentation =
@@ -156,6 +275,12 @@ struct FormatStyle {
   IndentationPolicy named_parameter_indentation = defaults::kIndentationPolicy;
   IndentationPolicy named_port_indentation = defaults::kIndentationPolicy;
 
+  ListOpening module_parameter_list_opening = ListOpening::kSameLine;
+  ListOpening module_port_list_opening = ListOpening::kSameLine;
+  ListCommaPlacement port_list_comma_placement = ListCommaPlacement::kTrailing;
+  ListCommaPlacement parameter_list_comma_placement =
+      ListCommaPlacement::kTrailing;
+  bool break_after_parameter_override = defaults::kBreakAfterParameterOverride;
   AlignmentGroupBoundary alignment_group_boundary =
       defaults::kAlignmentGroupBoundary;
 
@@ -163,6 +288,11 @@ struct FormatStyle {
       defaults::kPortDeclarationsRightAlignPackedDimensions;
   bool port_declarations_right_align_unpacked_dimensions =
       defaults::kPortDeclarationsRightAlignUnpackedDimensions;
+  DimensionSpacing packed_dimension_separator = DimensionSpacing::kCompact;
+  DimensionSpacing spacing_before_unpacked_dimensions =
+      DimensionSpacing::kCompact;
+  ParenPadding named_port_paren_padding = ParenPadding::kCompact;
+  ParenPadding named_parameter_paren_padding = ParenPadding::kCompact;
   bool compact_indexing_and_selections =
       defaults::kCompactIndexingAndSelections;
   bool class_parameter_space = defaults::kClassParameterSpace;

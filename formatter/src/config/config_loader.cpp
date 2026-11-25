@@ -8,6 +8,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <valijson/adapters/yaml_cpp_adapter.hpp>
 #include <valijson/schema.hpp>
@@ -210,6 +211,12 @@ auto applyDocument(const YAML::Node& doc, FormatStyle& style) -> void {
     } else if (key == "named_port_alignment") {
       style.named_port_alignment =
           alignmentPolicyFromString(value.as<std::string>());
+    } else if (key == "named_port_paren_alignment") {
+      style.named_port_paren_alignment =
+          parenAlignmentFromString(value.as<std::string>());
+    } else if (key == "named_parameter_paren_alignment") {
+      style.named_parameter_paren_alignment =
+          parenAlignmentFromString(value.as<std::string>());
     } else if (key == "parameter_declaration_alignment") {
       style.parameter_declaration_alignment =
           alignmentPolicyFromString(value.as<std::string>());
@@ -228,6 +235,9 @@ auto applyDocument(const YAML::Node& doc, FormatStyle& style) -> void {
     } else if (key == "distribution_items_alignment") {
       style.distribution_items_alignment =
           alignmentPolicyFromString(value.as<std::string>());
+    } else if (key == "module_body_indentation") {
+      style.module_body_indentation =
+          moduleBodyIndentationFromString(value.as<std::string>());
     } else if (key == "port_declarations_indentation") {
       style.port_declarations_indentation =
           indentationPolicyFromString(value.as<std::string>());
@@ -240,6 +250,20 @@ auto applyDocument(const YAML::Node& doc, FormatStyle& style) -> void {
     } else if (key == "named_port_indentation") {
       style.named_port_indentation =
           indentationPolicyFromString(value.as<std::string>());
+    } else if (key == "module_parameter_list_opening") {
+      style.module_parameter_list_opening =
+          listOpeningFromString(value.as<std::string>());
+    } else if (key == "module_port_list_opening") {
+      style.module_port_list_opening =
+          listOpeningFromString(value.as<std::string>());
+    } else if (key == "port_list_comma_placement") {
+      style.port_list_comma_placement =
+          listCommaPlacementFromString(value.as<std::string>());
+    } else if (key == "parameter_list_comma_placement") {
+      style.parameter_list_comma_placement =
+          listCommaPlacementFromString(value.as<std::string>());
+    } else if (key == "break_after_parameter_override") {
+      style.break_after_parameter_override = value.as<bool>();
     } else if (key == "alignment_group_boundary") {
       style.alignment_group_boundary =
           alignmentGroupBoundaryFromString(value.as<std::string>());
@@ -248,6 +272,18 @@ auto applyDocument(const YAML::Node& doc, FormatStyle& style) -> void {
     } else if (key == "port_declarations_right_align_unpacked_dimensions") {
       style.port_declarations_right_align_unpacked_dimensions =
           value.as<bool>();
+    } else if (key == "packed_dimension_separator") {
+      style.packed_dimension_separator =
+          dimensionSpacingFromString(value.as<std::string>());
+    } else if (key == "spacing_before_unpacked_dimensions") {
+      style.spacing_before_unpacked_dimensions =
+          dimensionSpacingFromString(value.as<std::string>());
+    } else if (key == "named_port_paren_padding") {
+      style.named_port_paren_padding =
+          parenPaddingFromString(value.as<std::string>());
+    } else if (key == "named_parameter_paren_padding") {
+      style.named_parameter_paren_padding =
+          parenPaddingFromString(value.as<std::string>());
     } else if (key == "compact_indexing_and_selections") {
       style.compact_indexing_and_selections = value.as<bool>();
     } else if (key == "class_parameter_space") {
