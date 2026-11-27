@@ -201,10 +201,37 @@ auto TokenAnnotator::determineTokenTypes(
 
       case TK::ClassKeyword:
         ft.type = TokenType::kClassKeyword;
+        next_is_module_name = false;
         continue;
 
       case TK::EndClassKeyword:
         ft.type = TokenType::kEndClassKeyword;
+        continue;
+
+      case TK::PackageKeyword:
+        ft.type = TokenType::kPackageKeyword;
+        next_is_module_name = true;
+        continue;
+
+      case TK::EndPackageKeyword:
+        ft.type = TokenType::kEndPackageKeyword;
+        continue;
+
+      case TK::InterfaceKeyword:
+        ft.type = TokenType::kInterfaceKeyword;
+        next_is_module_name = true;
+        continue;
+
+      case TK::EndInterfaceKeyword:
+        ft.type = TokenType::kEndInterfaceKeyword;
+        continue;
+
+      case TK::ImportKeyword:
+        ft.type = TokenType::kImportKeyword;
+        continue;
+
+      case TK::ExportKeyword:
+        ft.type = TokenType::kExportKeyword;
         continue;
 
       case TK::GenerateKeyword:
@@ -301,6 +328,10 @@ auto TokenAnnotator::determineTokenTypes(
 
       case TK::Dot:
         ft.type = TokenType::kDot;
+        continue;
+
+      case TK::DoubleColon:
+        ft.type = TokenType::kGeneric;
         continue;
 
       case TK::Hash:
@@ -511,6 +542,9 @@ auto TokenAnnotator::determineTokenTypes(
       case TK::LocalParamKeyword:
       case TK::GenVarKeyword:
       case TK::ReturnKeyword:
+      case TK::StaticKeyword:
+      case TK::ImplementsKeyword:
+      case TK::NewKeyword:
         ft.type = TokenType::kGeneric;
         continue;
 
@@ -545,6 +579,15 @@ auto TokenAnnotator::determineTokenTypes(
 
       case TK::IntegerBase:  // 4'b, 8'h
         ft.type = TokenType::kIntegerBase;
+        continue;
+
+      // `and`/`or`/`xor` are array reduction methods when they follow a dot
+      // (e.g. `b.and`); elsewhere they are gate primitives / event separators.
+      case TK::OrKeyword:
+      case TK::AndKeyword:
+      case TK::XorKeyword:
+        ft.type =
+            (prev_kind == TK::Dot) ? TokenType::kGeneric : TokenType::kUnknown;
         continue;
 
       default:
@@ -655,7 +698,8 @@ auto implSpacesRequired(TokenPair p) -> size_t {
   if (left.type == TokenType::kHash) {
     return 0;
   }
-  if (left.type == TokenType::kDot || right.type == TokenType::kDot) {
+  if (left.type == TokenType::kDot || right.type == TokenType::kDot ||
+      lk == TK::DoubleColon || rk == TK::DoubleColon) {
     return 0;
   }
   if (left.type == TokenType::kAtSign) {
@@ -708,7 +752,8 @@ auto implBreakPenalty(TokenPair p) -> size_t {
       left.type == TokenType::kAssignmentOperator) {
     return Penalty::kSoft;
   }
-  if (left.type == TokenType::kDot || left.type == TokenType::kHash) {
+  if (left.type == TokenType::kDot || left.type == TokenType::kHash ||
+      left.token.kind == TK::DoubleColon) {
     return Penalty::kHard;
   }
   if (right.balancing == GroupBalancing::kClose) {
@@ -726,6 +771,8 @@ auto implBreakPenalty(TokenPair p) -> size_t {
     case TokenType::kEndClassKeyword:
     case TokenType::kEndGenerateKeyword:
     case TokenType::kEndCaseKeyword:
+    case TokenType::kEndPackageKeyword:
+    case TokenType::kEndInterfaceKeyword:
       return true;
     default:
       return false;

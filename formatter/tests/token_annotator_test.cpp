@@ -129,6 +129,56 @@ TEST_F(TokenAnnotatorTest, RecognizedGenericTokensAreNotUnknown) {
   }
 }
 
+TEST_F(TokenAnnotatorTest, InterfaceClassNameIsNotModuleName) {
+  auto result = annotateWithDiagnostics(
+      "interface class Foo;\n"
+      "endclass\n");
+  EXPECT_TRUE(result.warnings.empty());
+
+  bool saw_class_name = false;
+  for (const auto& line : result.lines) {
+    EXPECT_FALSE(line.is_opaque);
+    for (const auto& token : line.tokens) {
+      if (token.token.kind == slang::parsing::TokenKind::Identifier &&
+          token.token.rawText() == "Foo") {
+        saw_class_name = true;
+        EXPECT_EQ(token.type, format::TokenType::kGeneric);
+      }
+    }
+  }
+  EXPECT_TRUE(saw_class_name);
+}
+
+TEST_F(TokenAnnotatorTest, InterfaceAndPackageNamesAreModuleNames) {
+  auto result = annotateWithDiagnostics(
+      "interface ifc;\n"
+      "endinterface\n"
+      "package pkg;\n"
+      "endpackage\n");
+  EXPECT_TRUE(result.warnings.empty());
+
+  bool saw_interface_name = false;
+  bool saw_package_name = false;
+  for (const auto& line : result.lines) {
+    EXPECT_FALSE(line.is_opaque);
+    for (const auto& token : line.tokens) {
+      if (token.token.kind != slang::parsing::TokenKind::Identifier) {
+        continue;
+      }
+      if (token.token.rawText() == "ifc") {
+        saw_interface_name = true;
+        EXPECT_EQ(token.type, format::TokenType::kModuleName);
+      }
+      if (token.token.rawText() == "pkg") {
+        saw_package_name = true;
+        EXPECT_EQ(token.type, format::TokenType::kModuleName);
+      }
+    }
+  }
+  EXPECT_TRUE(saw_interface_name);
+  EXPECT_TRUE(saw_package_name);
+}
+
 TEST_F(TokenAnnotatorTest, DirectiveArgumentMustNotBreak) {
   auto lines = annotateTokens("`include \"file.svh\"");
   ASSERT_FALSE(lines.empty());
