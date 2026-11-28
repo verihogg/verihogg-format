@@ -1,0 +1,312 @@
+name: sv-tests report
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sv-tests-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout formatter
+        uses: actions/checkout@v6
+        with:
+          path: formatter
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+
+      - name: Build formatter and export closure
+        working-directory: formatter
+        run: |
+          set -euo pipefail
+          out="$(nix build .#verihogg-format --no-link --print-out-paths)"
+          test -x "$out/bin/verihogg-format"
+          mkdir -p "$GITHUB_WORKSPACE/closure"
+          printf '%s\n' "$out" > "$GITHUB_WORKSPACE/closure/formatter-root.txt"
+          mapfile -t closure < <(nix-store -qR "$out")
+          test "${#closure[@]}" -gt 0
+          nix-store --export "${closure[@]}" \
+            | zstd -3 -T0 -c > "$GITHUB_WORKSPACE/closure/formatter.closure.zst"
+          ls -lh "$GITHUB_WORKSPACE/closure"
+
+      - name: Upload formatter closure
+        uses: actions/upload-artifact@v7
+        with:
+          name: formatter-closure
+          path: closure/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+          overwrite: true
+
+  report:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    env:
+      RUNNERS_FILTER: VerihoggFormat
+    steps:
+      - name: Checkout formatter
+        uses: actions/checkout@v6
+        with:
+          path: formatter
+          fetch-depth: 0
+
+      - name: Test history generation
+        run: PYTHONPATH=formatter/scripts/sv-tests python3 -m unittest discover -s formatter/scripts/sv-tests/tests
+
+      - name: Checkout sv-tests
+        uses: actions/checkout@v6
+        with:
+          repository: verihogg/sv-tests
+          # Replace with the merged runner-fix commit from develop before merge.
+          ref: eabb1204f2a3a23f51d0400a472e5d568a30b468
+          path: sv-tests
+
+      - name: Download report generators
+        env:
+          REPORT_GENERATORS_REVISION: 26b0633fa7dec51bdda6824f12a652ec7a7e9c0b
+        run: |
+          mkdir -p report-generators/tools
+          for script in sv_tests_unsupported_report.py sv_tests_warning_constructs.py; do
+            curl --fail --silent --show-error --location --retry 3 \
+              --output "report-generators/tools/$script" \
+              "https://raw.githubusercontent.com/verihogg/sv-tests-results/$REPORT_GENERATORS_REVISION/tools/$script"
+          done
+
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-venv libbit-vector-perl libjson-perl
+          python3 -m venv "$RUNNER_TEMP/sv-tests-venv"
+          "$RUNNER_TEMP/sv-tests-venv/bin/pip" install -r sv-tests/conf/requirements.txt
+          echo "$RUNNER_TEMP/sv-tests-venv/bin" >> "$GITHUB_PATH"
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+
+      - name: Download formatter closure
+        uses: actions/download-artifact@v8
+        with:
+          name: formatter-closure
+          path: formatter-closure
+
+      - name: Import formatter
+        run: bash formatter/scripts/sv-tests/import-formatter.sh formatter-closure
+
+      - name: Build Slang
+        working-directory: formatter
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/runner-bin"
+          slang_store=$(nix build --no-link --print-out-paths --impure --expr \
+            '(builtins.getFlake (toString ./.)).inputs.nixpkgs.legacyPackages.x86_64-linux.sv-lang')
+          ln -s "$slang_store/bin/slang" "$GITHUB_WORKSPACE/runner-bin/slang-driver"
+          echo "$GITHUB_WORKSPACE/runner-bin" >> "$GITHUB_PATH"
+
+      - name: Checkout test suites
+        working-directory: sv-tests
+        run: |
+          git submodule update --init --recursive --depth 1 third_party/tests third_party/cores
+          git submodule update --init --recursive --depth 1 third_party/tools/yosys
+          git submodule update --init --depth 1 third_party/tools/icarus
+
+      - name: Run sv-tests and generate pages
+        working-directory: sv-tests
+        env:
+          FORMATTER_SHA: ${{ github.sha }}
+          FORMATTER_REPOSITORY: ${{ github.repository }}
+        run: bash "$GITHUB_WORKSPACE/formatter/scripts/sv-tests/report.sh" "$GITHUB_WORKSPACE/report-generators/tools"
+
+      - name: Update formatter support history
+        env:
+          HISTORY_REMOTE: https://github.com/verihogg/sv-tests-results.git
+          # Fine-grained token with Contents write on sv-tests-results.
+          GH_TOKEN: ${{ github.repository == 'verihogg/verihogg-format' && github.ref == 'refs/heads/main' && secrets.REPORT_HISTORY_TOKEN || '' }}
+        run: |
+          options=()
+          if [[ -n "$GH_TOKEN" ]]; then
+            gh auth setup-git --hostname github.com
+            options+=(--publish)
+          elif [[ "$GITHUB_REPOSITORY:$GITHUB_REF" == 'verihogg/verihogg-format:refs/heads/main' ]]; then
+            echo "::warning::REPORT_HISTORY_TOKEN is missing. Publishing the existing support history without a new snapshot."
+          fi
+          bash formatter/scripts/sv-tests/publish-history.sh formatter sv-tests/out/report \
+            "$RUNNER_TEMP/formatter-history-snapshot.json" "${options[@]}"
+
+      - name: Upload incomplete report for debugging
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sv-tests-incomplete-report
+          path: |
+            sv-tests/out/report/
+            sv-tests/out/logs/VerihoggFormat/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Archive the base site
+        run: tar --dereference --hard-dereference -C sv-tests/out/report -cf sv-tests-site.tar .
+
+      - name: Upload the base site
+        uses: actions/upload-artifact@v7
+        with:
+          name: sv-tests-site
+          path: sv-tests-site.tar
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+
+  projects:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - name: black-parrot
+            repository: black-parrot/black-parrot
+            ref: master
+          - name: cheriot-ibex-dv
+            repository: lowRISC/cheriot-ibex-dv
+            ref: main
+          - name: cheriot-ibex-rtl
+            repository: microsoft/cheriot-ibex
+            ref: 14e275b4d36486c9979a76248791c410145ea50b
+          - name: core-v-verif
+            repository: openhwfoundation/core-v-verif
+            ref: master
+          - name: cva6
+            repository: openhwfoundation/cva6
+            ref: main
+          - name: cva6-cvfpu
+            repository: openhwfoundation/cvfpu
+            ref: 3eb6afeab2cb33f7d8689222955d0171aeb3a801
+          - name: cva6-hpdcache
+            repository: openhwfoundation/cv-hpdcache
+            ref: 40d2897eda70644df2eb857efd9fa573eaacafab
+          - name: ibex
+            repository: lowRISC/ibex
+            ref: master
+          - name: opentitan
+            repository: lowRISC/opentitan
+            ref: master
+          - name: scr1
+            repository: syntacore/scr1
+            ref: master
+          - name: uvm-core
+            repository: accellera-official/uvm-core
+            ref: main
+
+    steps:
+      - name: Checkout report tools
+        uses: actions/checkout@v6
+        with:
+          path: formatter
+          sparse-checkout: |
+            tools/unsupported-report
+            scripts/sv-tests
+
+      - name: Install Nix (for closure import only)
+        uses: cachix/install-nix-action@v31
+
+      - name: Download formatter closure
+        uses: actions/download-artifact@v8
+        with:
+          name: formatter-closure
+          path: formatter-closure
+
+      - name: Import formatter
+        run: bash formatter/scripts/sv-tests/import-formatter.sh formatter-closure
+
+      - name: Checkout ${{ matrix.project.name }}
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ matrix.project.repository }}
+          ref: ${{ matrix.project.ref }}
+          path: src/${{ matrix.project.name }}
+
+      - name: Generate ${{ matrix.project.name }} report
+        run: |
+          set -euo pipefail
+          python3 formatter/tools/unsupported-report/unsupported_report.py \
+            "src/${{ matrix.project.name }}" \
+            --site \
+            -o "out/projects/unsupported-${{ matrix.project.name }}.html"
+
+      - name: Upload project report
+        uses: actions/upload-artifact@v7
+        with:
+          name: unsupported-project-${{ matrix.project.name }}
+          path: out/projects/unsupported-${{ matrix.project.name }}.html
+          overwrite: true
+          if-no-files-found: error
+          retention-days: 7
+
+  assemble:
+    needs: [report, projects]
+    if: ${{ !cancelled() && needs.report.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout report tools
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: tools/unsupported-report
+
+      - name: Download the base site
+        uses: actions/download-artifact@v8
+        with:
+          name: sv-tests-site
+
+      - name: Download available project reports
+        uses: actions/download-artifact@v8
+        with:
+          pattern: unsupported-project-*
+          path: project-artifacts
+          merge-multiple: true
+
+      - name: Assemble report pages
+        run: |
+          mkdir -p site project-artifacts
+          tar -xf sv-tests-site.tar -C site
+          python3 tools/unsupported-report/assemble_site.py site project-artifacts
+
+      - name: Upload report for inspection
+        uses: actions/upload-artifact@v7
+        with:
+          name: sv-tests-report
+          path: site/
+          if-no-files-found: error
+          retention-days: 14
+          overwrite: true
+
+      - name: Package Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site/
+
+  deploy:
+    needs: assemble
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

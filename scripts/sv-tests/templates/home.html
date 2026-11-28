@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>verihogg / reports</title>
+  <link rel="stylesheet" href="sv-tests-reports.css">
+  <style>
+    h1.home-title {
+      margin: clamp(.75rem, 2vw, 1.5rem) 0 0;
+      font-size: clamp(2rem, 7vw, 6rem);
+      font-weight: 700;
+      line-height: 1.05;
+      letter-spacing: normal;
+    }
+    .home-content { width: min(calc(100% - var(--gutter) - var(--gutter)), 1300px); margin-inline: auto; }
+    main { padding: clamp(1.25rem, 3vw, 2rem) 0 64px; }
+    .intro { display: flex; justify-content: space-between; align-items: flex-start; gap: 44px; margin-bottom: 74px; }
+    .intro-copy { max-width: 850px; }
+    .intro p { margin: 0; font-size: clamp(17px, 2vw, 28px); line-height: 1.45; }
+    .code { flex: none; margin: 9px 0 0; padding: 7px 0 7px 26px; border-left: 4px solid var(--blue); font: 22px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .code span { color: var(--blue); }
+    .links { display: grid; gap: 26px; }
+    .report-link { display: grid; grid-template-columns: 122px minmax(0, 1fr) 46px; align-items: center; min-height: 158px; padding: 28px 31px; border: 2px solid var(--ink); border-radius: 14px; color: inherit; text-decoration: none; transition: background .18s ease, border-color .18s ease, transform .18s ease; }
+    .report-link:hover { background: #fff; border-color: var(--blue); transform: translateY(-2px); }
+    .report-link:focus-visible { outline: 4px solid var(--blue); outline-offset: 5px; }
+    .icon { display: flex; align-items: center; height: 79px; border-right: 1px solid #667085; color: var(--blue); }
+    .icon svg { width: 77px; height: 64px; fill: none; stroke: currentColor; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+    .label { padding: 0 31px; }
+    .label strong { display: block; margin-bottom: 7px; font-size: clamp(23px, 2.8vw, 39px); line-height: 1.1; letter-spacing: -.025em; }
+    .label span { display: block; font-size: clamp(16px, 1.65vw, 23px); line-height: 1.4; }
+    .arrow { color: var(--blue); font-size: 46px; line-height: 1; text-align: right; }
+    @media (max-width: 760px) {
+      main { padding-bottom: 51px; }
+      .intro { margin-bottom: 40px; }
+      .code { display: none; }
+      .report-link { min-height: 129px; grid-template-columns: 53px minmax(0, 1fr) 28px; padding: 20px 17px; }
+      .icon { height: 57px; }
+      .icon svg { width: 43px; height: 44px; }
+      .label { padding: 0 17px; }
+      .arrow { font-size: 30px; }
+    }
+    @media (prefers-reduced-motion: reduce) { .report-link { transition: none; } }
+  </style>
+</head>
+<body>
+  <header class="report-header">
+    <p class="report-brand"><a href="index.html">verihogg <span>/ reports</span></a></p>
+    <h1 class="home-title">Explore the reports</h1>
+  </header>
+  <div class="home-content">
+    <main>
+      <div class="intro">
+        <div class="intro-copy">
+          <p>SystemVerilog formatter test reports, including formatting test results and a list of unsupported language constructs.</p>
+        </div>
+        <pre class="code" aria-hidden="true">module top;
+  <span>// SystemVerilog</span>
+endmodule</pre>
+      </div>
+      <nav class="links" aria-label="Reports">
+        <a class="report-link" href="report.html">
+          <span class="icon" aria-hidden="true"><svg viewBox="0 0 80 64"><path d="M18 16 5 30l13 14M41 16l13 14-13 14M32 10 23 50M53 46l6 6 12-15"/></svg></span>
+          <span class="label"><strong>Test results</strong><span>View the formatter test results for SystemVerilog code.</span></span>
+          <span class="arrow" aria-hidden="true">→</span>
+        </a>
+        <a class="report-link" href="history.html">
+          <span class="icon" aria-hidden="true"><svg viewBox="0 0 80 64"><path d="M18 16 5 30l13 14M41 16l13 14-13 14M32 10 23 50M53 39l14 14M67 39 53 53"/></svg></span>
+          <span class="label"><strong>Unsupported constructs</strong><span>Track changes in support for SystemVerilog constructs.</span></span>
+          <span class="arrow" aria-hidden="true">→</span>
+        </a>
+      </nav>
+    </main>
+  </div>
+</body>
+</html>
